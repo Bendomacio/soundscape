@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { X, Music, MapPin, Link, Loader2, Check, AlertCircle } from 'lucide-react';
 import { getTrackInfo } from '../lib/spotify';
+import { LocationPicker } from './LocationPicker';
 
 interface SubmitSongModalProps {
   onClose: () => void;
@@ -357,33 +358,21 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                 />
               </div>
 
-              {/* Coordinates */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
-                <div className="form-group">
-                  <label className="label">Latitude</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.latitude}
-                    onChange={(e) => setFormData({ ...formData, latitude: parseFloat(e.target.value) })}
-                    className="input"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="label">Longitude</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formData.longitude}
-                    onChange={(e) => setFormData({ ...formData, longitude: parseFloat(e.target.value) })}
-                    className="input"
-                  />
-                </div>
+              {/* Map Picker */}
+              <div className="form-group">
+                <label className="label" style={{ marginBottom: 'var(--space-sm)' }}>
+                  Select Location on Map *
+                </label>
+                <LocationPicker
+                  latitude={formData.latitude}
+                  longitude={formData.longitude}
+                  onChange={(lat, lng) => setFormData(prev => ({ 
+                    ...prev, 
+                    latitude: lat, 
+                    longitude: lng 
+                  }))}
+                />
               </div>
-
-              <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginBottom: 'var(--space-lg)' }}>
-                💡 Tip: Right-click on Google Maps to copy coordinates
-              </p>
 
               {/* Description */}
               <div className="form-group">
