@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Music, MapPin, Link, Search, Loader2 } from 'lucide-react';
+import { X, Music, MapPin, Link, Loader2, Check, AlertCircle } from 'lucide-react';
+import { getTrackInfo } from '../lib/spotify';
 
 interface SubmitSongModalProps {
   onClose: () => void;
@@ -11,32 +12,107 @@ interface SubmitSongModalProps {
     longitude: number;
     locationDescription: string;
     spotifyUrl?: string;
+    albumArt?: string;
   }) => void;
   userLocation: { latitude: number; longitude: number } | null;
+}
+
+// Extract track ID from various Spotify URL formats
+function extractSpotifyTrackId(input: string): string | null {
+  // Handle spotify:track:xxx format
+  if (input.startsWith('spotify:track:')) {
+    return input.replace('spotify:track:', '');
+  }
+  
+  // Handle https://open.spotify.com/track/xxx format
+  const urlMatch = input.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
+  if (urlMatch) {
+    return urlMatch[1];
+  }
+  
+  // Handle just the track ID (22 character alphanumeric)
+  if (/^[a-zA-Z0-9]{22}$/.test(input.trim())) {
+    return input.trim();
+  }
+  
+  return null;
 }
 
 export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongModalProps) {
   const [step, setStep] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
+  const [spotifyError, setSpotifyError] = useState<string | null>(null);
+  const [spotifySuccess, setSpotifySuccess] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     artist: '',
     spotifyUrl: '',
+    spotifyTrackId: '',
+    albumArt: '',
     locationName: '',
     latitude: userLocation?.latitude || 51.5074,
     longitude: userLocation?.longitude || -0.1278,
     locationDescription: ''
   });
 
-  const handleSpotifySearch = async () => {
+  const handleSpotifyFetch = async (url: string) => {
+    setSpotifyError(null);
+    setSpotifySuccess(false);
+    
+    const trackId = extractSpotifyTrackId(url);
+    if (!trackId) {
+      setSpotifyError('Invalid Spotify URL or track ID');
+      return;
+    }
+    
     setIsSearching(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSearching(false);
+    
+    try {
+      const trackInfo = await getTrackInfo(trackId);
+      
+      if (trackInfo) {
+        setFormData(prev => ({
+          ...prev,
+          title: trackInfo.title,
+          artist: trackInfo.artist,
+          albumArt: trackInfo.albumArt,
+          spotifyTrackId: trackId
+        }));
+        setSpotifySuccess(true);
+      } else {
+        setSpotifyError('Could not fetch track info. Check the URL and try again.');
+      }
+    } catch {
+      setSpotifyError('Failed to connect to Spotify');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Auto-fetch when URL is pasted
+  const handleSpotifyUrlChange = (url: string) => {
+    setFormData(prev => ({ ...prev, spotifyUrl: url }));
+    setSpotifySuccess(false);
+    setSpotifyError(null);
+    
+    // Auto-fetch if it looks like a valid Spotify URL
+    if (url.includes('spotify.com/track/') || url.startsWith('spotify:track:')) {
+      handleSpotifyFetch(url);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit({
+      title: formData.title,
+      artist: formData.artist,
+      locationName: formData.locationName,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+      locationDescription: formData.locationDescription,
+      spotifyUrl: formData.spotifyTrackId ? `spotify:track:${formData.spotifyTrackId}` : undefined,
+      albumArt: formData.albumArt || undefined
+    });
     onClose();
   };
 
@@ -124,36 +200,97 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
         <form onSubmit={handleSubmit} className="modal-body">
           {step === 1 ? (
             <>
-              {/* Spotify URL search */}
+              {/* Spotify URL input with auto-fetch */}
               <div className="form-group">
                 <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                   <Link size={14} />
-                  Spotify URL (optional)
+                  Spotify URL
                 </label>
-                <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                <div style={{ position: 'relative' }}>
                   <input
-                    type="url"
+                    type="text"
                     value={formData.spotifyUrl}
-                    onChange={(e) => setFormData({ ...formData, spotifyUrl: e.target.value })}
-                    placeholder="https://open.spotify.com/track/..."
+                    onChange={(e) => handleSpotifyUrlChange(e.target.value)}
+                    placeholder="Paste Spotify link here..."
                     className="input"
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSpotifySearch}
-                    disabled={!formData.spotifyUrl || isSearching}
-                    className="btn"
                     style={{ 
-                      background: '#1DB954', 
-                      padding: '0 var(--space-lg)',
-                      minWidth: '44px'
+                      paddingRight: '44px',
+                      borderColor: spotifySuccess ? '#1DB954' : spotifyError ? '#ef4444' : undefined
                     }}
-                  >
-                    {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
-                  </button>
+                  />
+                  <div style={{ 
+                    position: 'absolute', 
+                    right: '12px', 
+                    top: '50%', 
+                    transform: 'translateY(-50%)',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}>
+                    {isSearching && <Loader2 size={18} className="animate-spin" style={{ color: '#1DB954' }} />}
+                    {spotifySuccess && <Check size={18} style={{ color: '#1DB954' }} />}
+                    {spotifyError && <AlertCircle size={18} style={{ color: '#ef4444' }} />}
+                  </div>
                 </div>
+                {spotifyError && (
+                  <p style={{ fontSize: 'var(--text-xs)', color: '#ef4444', marginTop: 'var(--space-xs)' }}>
+                    {spotifyError}
+                  </p>
+                )}
               </div>
+
+              {/* Album art preview when fetched */}
+              {formData.albumArt && (
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 'var(--space-md)',
+                  padding: 'var(--space-md)',
+                  background: 'var(--color-dark-lighter)',
+                  borderRadius: 'var(--radius-lg)',
+                  marginBottom: 'var(--space-md)',
+                  border: '1px solid #1DB954'
+                }}>
+                  <img 
+                    src={formData.albumArt} 
+                    alt="Album art"
+                    style={{ 
+                      width: '64px', 
+                      height: '64px', 
+                      borderRadius: 'var(--radius-md)',
+                      objectFit: 'cover'
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ 
+                      fontWeight: 'var(--font-semibold)', 
+                      color: 'var(--color-text)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {formData.title || 'Track loaded'}
+                    </p>
+                    <p style={{ 
+                      fontSize: 'var(--text-sm)', 
+                      color: '#f59e0b',
+                      marginTop: '2px'
+                    }}>
+                      ⚠️ Please enter artist below
+                    </p>
+                  </div>
+                  <div style={{
+                    background: '#1DB954',
+                    color: 'white',
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 'var(--font-medium)',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    Linked ✓
+                  </div>
+                </div>
+              )}
 
               <div style={{ 
                 display: 'flex', 

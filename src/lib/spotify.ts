@@ -67,22 +67,23 @@ export async function getTrackInfo(
       return null;
     }
     
-    const data: SpotifyOEmbed = await response.json();
+    const data = await response.json();
     
-    // Parse title - usually "Song Name - Artist Name" or just "Song Name"
-    let title = data.title;
-    let artist = '';
+    // Spotify oEmbed only returns track title, NOT artist
+    // Clean up title by removing remaster/version suffixes
+    let title = data.title || '';
     
-    // The title from oEmbed is typically "Song - Artist"
-    const parts = data.title.split(' - ');
-    if (parts.length >= 2) {
-      title = parts[0].trim();
-      artist = parts.slice(1).join(' - ').trim();
-    }
+    // Remove common suffixes like "- 2011 Remaster", "(2019 Remaster)", etc.
+    title = title
+      .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
+      .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
+      .replace(/\s*-\s*Remaster(ed)?/gi, '')
+      .replace(/\s*\(Remaster(ed)?\)/gi, '')
+      .trim();
     
     return {
       title,
-      artist,
+      artist: '', // oEmbed doesn't provide artist - user must enter manually
       albumArt: data.thumbnail_url
     };
   } catch (error) {

@@ -210,12 +210,14 @@ function AppContent() {
     longitude: number;
     locationDescription: string;
     spotifyUrl?: string;
+    albumArt?: string;
   }) => {
     const newSong: SongLocation = {
       id: `user-${Date.now()}`,
       title: data.title,
       artist: data.artist,
-      albumArt: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400',
+      albumArt: data.albumArt || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400',
+      spotifyUri: data.spotifyUrl,
       latitude: data.latitude,
       longitude: data.longitude,
       locationName: data.locationName,
