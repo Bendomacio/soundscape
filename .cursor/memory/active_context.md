@@ -1,36 +1,31 @@
 # Active Context
 
 ## Current Branch
-`feature/submit-song-map-picker`
+`main`
 
-## Branch Purpose
-Improving the song submission experience with better location selection and Spotify search.
+## Recent Merge
+Feature branch `feature/submit-song-map-picker` was merged and deleted on 2026-01-21.
 
-## What's Been Done on This Branch
-1. ✅ Auto-populate song info from Spotify URL (commit `61493ba`)
-2. ✅ Interactive map picker for location selection (commit `b495874`)
-3. ✅ Improved location picker UX - larger map, "Use my location" button (commit `61a6f9c`)
-4. ✅ Location search - search by address/place name using Mapbox Geocoding (uncommitted)
-5. ✅ Spotify search - search songs by name instead of requiring URL (uncommitted)
+## What's Now in Main
+1. ✅ Auto-populate song info from Spotify URL
+2. ✅ Interactive map picker for location selection
+3. ✅ Improved location picker UX - larger map, "Use my location" button
+4. ✅ Location search - search by address/place name using Mapbox Geocoding
+5. ✅ Spotify search - search songs by name instead of requiring URL
 
 ## Current State
-- Branch has **uncommitted changes** for location search and Spotify search features
-- Features are **working** with mock Spotify data
+- All features merged to `main` and pushed
 - Using mock Spotify search results (3 sample songs) since real API not configured
 
-## Uncommitted Changes
-- `src/components/LocationPicker.tsx` - Added address/place search with Mapbox Geocoding
-- `src/components/SubmitSongModal.tsx` - Added Spotify song search with autocomplete
-
 ## Next Session TODO
-- [ ] Commit and push the location search + Spotify search features
-- [ ] Test with real Spotify credentials when available
+- [ ] Test with real Spotify credentials when API signup reopens
 - [ ] Possible enhancements:
   - Drag marker support (drag to reposition instead of click)
   - Better mobile responsiveness for the modal
   - Form validation improvements
+  - More mock songs for testing
 
-## Files Changed in This Feature
+## Key Files
 - `src/components/SubmitSongModal.tsx` - 2-step submission wizard with Spotify search
 - `src/components/LocationPicker.tsx` - Map-based location picker with address search
 
