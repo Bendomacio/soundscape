@@ -1,5 +1,39 @@
 # Progress Log
 
+## Session: 2026-01-21
+
+### Summary
+Added two major features to the song submission flow: location search and Spotify song search.
+
+### Completed
+- **Location Search (LocationPicker.tsx)**:
+  - Added search box above the map
+  - Uses Mapbox Geocoding API for address/place search
+  - Debounced search (300ms) with dropdown results
+  - Click result to set coordinates and pan map
+  - Works alongside existing click-to-select and "Use my location"
+
+- **Spotify Song Search (SubmitSongModal.tsx)**:
+  - Replaced URL-only input with search box
+  - Can search by song name OR paste Spotify URL (auto-detected)
+  - Search results show album art, song name, artist
+  - Click to select and auto-fill all fields
+  - Falls back to mock results when API not configured
+  - **NOTE**: Spotify API signup currently closed - using mock data for now
+
+### Commits Made
+- None yet - changes uncommitted, ready to commit when user confirms
+
+### Branch Status
+- Has uncommitted changes ready for testing
+- Mock Spotify search working (3 sample songs)
+
+### Technical Notes
+- Had to use `import type { SpotifyTrack }` to fix Vite module resolution issue
+- Dev server may run on port 5174 if 5173 is busy
+
+---
+
 ## Session: 2026-01-20
 
 ### Summary

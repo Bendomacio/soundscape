@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
-import { X, Music, MapPin, Link, Loader2, Check, AlertCircle } from 'lucide-react';
-import { getTrackInfo } from '../lib/spotify';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { X, Music, MapPin, Search, Loader2, Check, AlertCircle } from 'lucide-react';
+import { getTrackInfo, searchTracks } from '../lib/spotify';
+import type { SpotifyTrack } from '../lib/spotify';
 import { LocationPicker } from './LocationPicker';
 
 interface SubmitSongModalProps {
@@ -39,6 +40,11 @@ function extractSpotifyTrackId(input: string): string | null {
   return null;
 }
 
+// Check if input looks like a Spotify URL
+function isSpotifyUrl(input: string): boolean {
+  return input.includes('spotify.com/track/') || input.startsWith('spotify:track:');
+}
+
 export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongModalProps) {
   const [step, setStep] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
@@ -55,6 +61,24 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
     longitude: userLocation?.longitude || -0.1278,
     locationDescription: ''
   });
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SpotifyTrack[]>([]);
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout>();
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowResults(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSpotifyFetch = async (url: string) => {
     setSpotifyError(null);
@@ -90,17 +114,80 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
     }
   };
 
-  // Auto-fetch when URL is pasted
-  const handleSpotifyUrlChange = (url: string) => {
-    setFormData(prev => ({ ...prev, spotifyUrl: url }));
-    setSpotifySuccess(false);
+  // Handle search input - auto-detect URL vs search query
+  const handleSearchInput = useCallback((input: string) => {
+    setSearchQuery(input);
     setSpotifyError(null);
     
-    // Auto-fetch if it looks like a valid Spotify URL
-    if (url.includes('spotify.com/track/') || url.startsWith('spotify:track:')) {
-      handleSpotifyFetch(url);
+    // Clear previous debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
-  };
+
+    // If it looks like a Spotify URL, fetch track info directly
+    if (isSpotifyUrl(input)) {
+      setSearchResults([]);
+      setShowResults(false);
+      handleSpotifyFetch(input);
+      return;
+    }
+
+    // Reset if empty
+    if (!input.trim()) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    // Otherwise, search by name (debounced)
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await searchTracks(input, 6);
+        setSearchResults(results);
+        setShowResults(results.length > 0);
+      } catch (error) {
+        console.error('Search error:', error);
+        setSpotifyError('Search failed. Try pasting a Spotify URL instead.');
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  // Handle selecting a track from search results
+  const handleSelectTrack = useCallback((track: SpotifyTrack) => {
+    const albumArt = track.album.images[0]?.url || '';
+    const artistNames = track.artists.map(a => a.name).join(', ');
+    
+    setFormData(prev => ({
+      ...prev,
+      title: track.name,
+      artist: artistNames,
+      albumArt: albumArt,
+      spotifyTrackId: track.id
+    }));
+    
+    setSearchQuery(`${track.name} - ${artistNames}`);
+    setSearchResults([]);
+    setShowResults(false);
+    setSpotifySuccess(true);
+  }, []);
+
+  // Clear selection
+  const handleClearSelection = useCallback(() => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowResults(false);
+    setSpotifySuccess(false);
+    setFormData(prev => ({
+      ...prev,
+      title: '',
+      artist: '',
+      albumArt: '',
+      spotifyTrackId: ''
+    }));
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,18 +288,19 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
         <form onSubmit={handleSubmit} className="modal-body">
           {step === 1 ? (
             <>
-              {/* Spotify URL input with auto-fetch */}
-              <div className="form-group">
+              {/* Spotify search input */}
+              <div className="form-group" ref={searchRef} style={{ position: 'relative' }}>
                 <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
-                  <Link size={14} />
-                  Spotify URL
+                  <Search size={14} />
+                  Search Spotify
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type="text"
-                    value={formData.spotifyUrl}
-                    onChange={(e) => handleSpotifyUrlChange(e.target.value)}
-                    placeholder="Paste Spotify link here..."
+                    value={searchQuery}
+                    onChange={(e) => handleSearchInput(e.target.value)}
+                    onFocus={() => searchResults.length > 0 && setShowResults(true)}
+                    placeholder="Search by song name or paste Spotify URL..."
                     className="input"
                     style={{ 
                       paddingRight: '44px',
@@ -225,11 +313,12 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                     top: '50%', 
                     transform: 'translateY(-50%)',
                     display: 'flex',
-                    alignItems: 'center'
+                    alignItems: 'center',
+                    gap: 'var(--space-xs)'
                   }}>
                     {isSearching && <Loader2 size={18} className="animate-spin" style={{ color: '#1DB954' }} />}
-                    {spotifySuccess && <Check size={18} style={{ color: '#1DB954' }} />}
-                    {spotifyError && <AlertCircle size={18} style={{ color: '#ef4444' }} />}
+                    {spotifySuccess && !isSearching && <Check size={18} style={{ color: '#1DB954' }} />}
+                    {spotifyError && !isSearching && <AlertCircle size={18} style={{ color: '#ef4444' }} />}
                   </div>
                 </div>
                 {spotifyError && (
@@ -237,10 +326,88 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                     {spotifyError}
                   </p>
                 )}
+
+                {/* Search results dropdown */}
+                {showResults && searchResults.length > 0 && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: '4px',
+                    background: 'var(--color-dark-card)',
+                    border: '1px solid var(--color-dark-lighter)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.4)',
+                    zIndex: 20,
+                    maxHeight: '280px',
+                    overflowY: 'auto'
+                  }}>
+                    {searchResults.map((track) => (
+                      <button
+                        key={track.id}
+                        type="button"
+                        onClick={() => handleSelectTrack(track)}
+                        style={{
+                          width: '100%',
+                          padding: 'var(--space-sm) var(--space-md)',
+                          background: 'none',
+                          border: 'none',
+                          borderBottom: '1px solid var(--color-dark-lighter)',
+                          color: 'var(--color-text)',
+                          fontSize: 'var(--text-sm)',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          transition: 'background var(--transition-fast)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--space-sm)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'var(--color-dark-lighter)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'none';
+                        }}
+                      >
+                        <img 
+                          src={track.album.images[track.album.images.length - 1]?.url || track.album.images[0]?.url} 
+                          alt=""
+                          style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: 'var(--radius-sm)',
+                            objectFit: 'cover',
+                            flexShrink: 0
+                          }}
+                        />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ 
+                            fontWeight: 'var(--font-medium)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {track.name}
+                          </p>
+                          <p style={{ 
+                            fontSize: 'var(--text-xs)', 
+                            color: 'var(--color-text-muted)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {track.artists.map(a => a.name).join(', ')}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Album art preview when fetched */}
-              {formData.albumArt && (
+              {/* Selected track preview */}
+              {spotifySuccess && formData.albumArt && (
                 <div style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -269,27 +436,35 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
                     }}>
-                      {formData.title || 'Track loaded'}
+                      {formData.title}
                     </p>
                     <p style={{ 
                       fontSize: 'var(--text-sm)', 
-                      color: '#f59e0b',
-                      marginTop: '2px'
+                      color: 'var(--color-text-muted)',
+                      marginTop: '2px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
                     }}>
-                      ⚠️ Please enter artist below
+                      {formData.artist}
                     </p>
                   </div>
-                  <div style={{
-                    background: '#1DB954',
-                    color: 'white',
-                    padding: '4px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                    fontSize: 'var(--text-xs)',
-                    fontWeight: 'var(--font-medium)',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    Linked ✓
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '4px',
+                      cursor: 'pointer',
+                      color: 'var(--color-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                    title="Clear selection"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
               )}
 
