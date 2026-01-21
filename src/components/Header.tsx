@@ -9,7 +9,7 @@ interface HeaderProps {
 }
 
 export function Header({ onSubmitClick, onLoginClick, onAdminClick }: HeaderProps) {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, profile, isAdmin, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -90,16 +90,24 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick }: HeaderProp
           <div className="relative" ref={menuRef}>
             <button 
               onClick={() => user ? setShowUserMenu(!showUserMenu) : onLoginClick()}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors overflow-hidden ${
                 user 
                   ? 'bg-[var(--color-primary)] text-white'
                   : 'bg-[var(--color-dark-card)] border border-[var(--color-dark-lighter)] hover:bg-[var(--color-dark-lighter)]'
               }`}
             >
               {user ? (
-                <span className="text-sm font-bold">
-                  {user.email?.charAt(0).toUpperCase()}
-                </span>
+                profile?.avatar_url ? (
+                  <img 
+                    src={profile.avatar_url} 
+                    alt="" 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-sm font-bold">
+                    {(profile?.display_name || user.email)?.charAt(0).toUpperCase()}
+                  </span>
+                )
               ) : (
                 <User className="w-5 h-5 text-[var(--color-text-muted)]" />
               )}
@@ -109,9 +117,9 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick }: HeaderProp
             {showUserMenu && user && (
               <div className="absolute right-0 top-full mt-2 w-56 bg-[var(--color-dark-card)] border border-[var(--color-dark-lighter)] rounded-xl shadow-xl overflow-hidden">
                 <div className="p-4 border-b border-[var(--color-dark-lighter)]">
-                  <p className="font-medium truncate">{user.email}</p>
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    {isAdmin ? 'Administrator' : 'Member'}
+                  <p className="font-medium truncate">{profile?.display_name || user.email}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] truncate">
+                    {isAdmin ? 'Administrator' : user.email}
                   </p>
                 </div>
                 

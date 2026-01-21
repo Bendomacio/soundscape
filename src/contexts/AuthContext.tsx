@@ -1,102 +1,194 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { supabase } from '../lib/supabase';
+import type { User, Session, Provider } from '@supabase/supabase-js';
 
-// Demo mode types (no Supabase required)
-interface DemoUser {
+interface Profile {
   id: string;
   email: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  is_admin: boolean;
 }
 
 interface AuthContextType {
-  user: DemoUser | null;
+  user: User | null;
+  profile: Profile | null;
+  session: Session | null;
   isAdmin: boolean;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signInWithProvider: (provider: Provider) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  isDemoMode: boolean;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Demo users (stored in localStorage)
-const DEMO_STORAGE_KEY = 'soundscape_demo_user';
-const ADMIN_EMAILS = ['admin@soundscape.app', 'admin@example.com'];
-
-// Always use demo mode for now (Supabase auth not fully implemented)
-const isDemoMode = true;
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load user from localStorage on mount (demo mode)
+  // Fetch user profile from profiles table
+  async function fetchProfile(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return null;
+      }
+
+      return data as Profile;
+    } catch (err) {
+      console.error('Failed to fetch profile:', err);
+      return null;
+    }
+  }
+
+  // Refresh profile data
+  async function refreshProfile() {
+    if (user) {
+      const profileData = await fetchProfile(user.id);
+      if (profileData) {
+        setProfile(profileData);
+        setIsAdmin(profileData.is_admin);
+      }
+    }
+  }
+
+  // Initialize auth state
   useEffect(() => {
-    if (isDemoMode) {
-      const stored = localStorage.getItem(DEMO_STORAGE_KEY);
-      if (stored) {
-        try {
-          const demoUser = JSON.parse(stored) as DemoUser;
-          setUser(demoUser);
-          setIsAdmin(ADMIN_EMAILS.includes(demoUser.email.toLowerCase()));
-        } catch {
-          localStorage.removeItem(DEMO_STORAGE_KEY);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchProfile(session.user.id).then(profileData => {
+          if (profileData) {
+            setProfile(profileData);
+            setIsAdmin(profileData.is_admin);
+          }
+          setIsLoading(false);
+        });
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth event:', event);
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          const profileData = await fetchProfile(session.user.id);
+          if (profileData) {
+            setProfile(profileData);
+            setIsAdmin(profileData.is_admin);
+          }
+        } else {
+          setProfile(null);
+          setIsAdmin(false);
         }
       }
-      setIsLoading(false);
-    } else {
-      // Real Supabase mode - would initialize here
-      setIsLoading(false);
-    }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  async function signIn(email: string, password: string): Promise<{ error: Error | null }> {
-    if (isDemoMode) {
-      // Demo mode - accept any login with password >= 6 chars
-      if (password.length < 6) {
-        return { error: new Error('Password must be at least 6 characters') };
+  // Sign in with email/password
+  async function signInWithEmail(email: string, password: string): Promise<{ error: Error | null }> {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        return { error: new Error(error.message) };
       }
-      
-      const demoUser: DemoUser = {
-        id: `demo-${Date.now()}`,
-        email: email.toLowerCase()
-      };
-      
-      setUser(demoUser);
-      setIsAdmin(ADMIN_EMAILS.includes(email.toLowerCase()));
-      localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(demoUser));
-      
+
       return { error: null };
+    } catch (err) {
+      return { error: err as Error };
     }
-    
-    // Real Supabase auth would go here
-    return { error: new Error('Supabase not configured') };
   }
 
-  async function signUp(email: string, password: string): Promise<{ error: Error | null }> {
-    if (isDemoMode) {
-      // In demo mode, signup works the same as login
-      return signIn(email, password);
+  // Sign up with email/password
+  async function signUpWithEmail(email: string, password: string): Promise<{ error: Error | null }> {
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
+
+      if (error) {
+        return { error: new Error(error.message) };
+      }
+
+      return { error: null };
+    } catch (err) {
+      return { error: err as Error };
     }
-    
-    return { error: new Error('Supabase not configured') };
   }
 
+  // Sign in with OAuth provider (Google, Discord, Facebook)
+  async function signInWithProvider(provider: Provider): Promise<{ error: Error | null }> {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+
+      if (error) {
+        return { error: new Error(error.message) };
+      }
+
+      return { error: null };
+    } catch (err) {
+      return { error: err as Error };
+    }
+  }
+
+  // Sign out
   async function signOut(): Promise<void> {
+    await supabase.auth.signOut();
     setUser(null);
+    setProfile(null);
+    setSession(null);
     setIsAdmin(false);
-    localStorage.removeItem(DEMO_STORAGE_KEY);
   }
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAdmin, 
-      isLoading, 
-      signIn, 
-      signUp, 
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      session,
+      isAdmin,
+      isLoading,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithProvider,
       signOut,
-      isDemoMode 
+      refreshProfile
     }}>
       {children}
     </AuthContext.Provider>

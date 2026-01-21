@@ -11,6 +11,7 @@ export interface SongLocation {
   locationName: string;
   locationDescription?: string;
   locationImage?: string;
+  userId?: string;
   submittedBy?: string;
   submittedAt?: Date;
   upvotes: number;

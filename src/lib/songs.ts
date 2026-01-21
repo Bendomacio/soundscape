@@ -19,6 +19,7 @@ function dbToSong(row: any): SongLocation {
     upvotes: row.upvotes || 0,
     verified: row.verified || false,
     tags: row.tags || [],
+    userId: row.user_id,
     submittedBy: row.submitted_by,
     submittedAt: row.created_at ? new Date(row.created_at) : undefined
   };
@@ -41,6 +42,7 @@ function songToDb(song: Partial<SongLocation> & { id?: string }) {
   if (song.upvotes !== undefined) db.upvotes = song.upvotes;
   if (song.verified !== undefined) db.verified = song.verified;
   if (song.tags !== undefined) db.tags = song.tags;
+  if (song.userId !== undefined) db.user_id = song.userId;
   if (song.submittedBy !== undefined) db.submitted_by = song.submittedBy;
   db.updated_at = new Date().toISOString();
   return db;

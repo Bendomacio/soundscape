@@ -8,7 +8,7 @@ import { SubmitSongModal } from './components/SubmitSongModal';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlayerContext';
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
 import { getTrackInfo } from './lib/spotify';
@@ -16,7 +16,8 @@ import { preloadImages, clearOldCache } from './lib/imageCache';
 import type { SongLocation, MapViewState } from './types';
 
 function AppContent() {
-  // Spotify player
+  // Auth & Spotify player
+  const { user, profile } = useAuth();
   const { play } = useSpotifyPlayer();
   
   // State
@@ -224,7 +225,8 @@ function AppContent() {
       locationDescription: data.locationDescription,
       upvotes: 0,
       verified: false,
-      submittedBy: 'You',
+      userId: user?.id,
+      submittedBy: profile?.display_name || user?.email || 'Anonymous',
       submittedAt: new Date()
     };
     
@@ -234,7 +236,7 @@ function AppContent() {
     
     // Persist to database
     await addSong(newSong);
-  }, []);
+  }, [user, profile]);
 
   // Admin handlers
   const handleUpdateSong = useCallback(async (songId: string, updates: Partial<SongLocation>) => {
@@ -278,7 +280,7 @@ function AppContent() {
     <div className="h-full w-full relative overflow-hidden bg-[#0D1117]">
       {/* Header */}
       <Header 
-        onSubmitClick={() => setShowSubmitModal(true)} 
+        onSubmitClick={() => user ? setShowSubmitModal(true) : setShowAuthModal(true)} 
         onLoginClick={() => setShowAuthModal(true)}
         onAdminClick={() => setShowAdminPanel(true)}
       />
