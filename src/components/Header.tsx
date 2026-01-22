@@ -1,14 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, User, Music2, LogOut, Settings, Shield } from 'lucide-react';
+import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface HeaderProps {
   onSubmitClick: () => void;
   onLoginClick: () => void;
   onAdminClick: () => void;
+  onMySubmissionsClick: () => void;
 }
 
-export function Header({ onSubmitClick, onLoginClick, onAdminClick }: HeaderProps) {
+export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissionsClick }: HeaderProps) {
   const { user, profile, isAdmin, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -124,6 +125,17 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick }: HeaderProp
                 </div>
                 
                 <div className="p-2">
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onMySubmissionsClick();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[var(--color-dark-lighter)] rounded-lg transition-colors text-left"
+                  >
+                    <FolderOpen className="w-4 h-4 text-[var(--color-text-muted)]" />
+                    <span>My Submissions</span>
+                  </button>
+
                   {isAdmin && (
                     <button
                       onClick={() => {

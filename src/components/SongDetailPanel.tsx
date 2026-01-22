@@ -23,6 +23,7 @@ import type { SongLocation, SongComment, SongPhoto } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getComments, addComment, deleteComment, getPhotos, uploadPhoto } from '../lib/comments';
+import { likeSong, unlikeSong, hasUserLikedSong, getSongLikeCount } from '../lib/songs';
 
 interface SongDetailPanelProps {
   song: SongLocation;
@@ -78,6 +79,8 @@ function useDominantColor(imageUrl: string): string {
 export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
   const [albumImgError, setAlbumImgError] = useState(false);
   const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(song.upvotes || 0);
+  const [isLiking, setIsLiking] = useState(false);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'comments' | 'photos'>('info');
   const [comments, setComments] = useState<SongComment[]>([]);
@@ -94,6 +97,19 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
   const { currentSong, isPlaying, isLoading, play, togglePlayPause } = useSpotifyPlayer();
   const { user, profile } = useAuth();
   const dominantColor = useDominantColor(song.albumArt || FALLBACK_IMAGE);
+
+  // Load like state on mount
+  useEffect(() => {
+    async function loadLikeState() {
+      if (user) {
+        const hasLiked = await hasUserLikedSong(song.id, user.id);
+        setLiked(hasLiked);
+      }
+      const count = await getSongLikeCount(song.id);
+      if (count > 0) setLikeCount(count);
+    }
+    loadLikeState();
+  }, [song.id, user]);
 
   const trackId = song.spotifyUri?.replace('spotify:track:', '');
   const isThisSongPlaying = currentSong?.id === song.id && isPlaying;
@@ -140,9 +156,32 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
     }
   };
 
-  const handleLike = () => {
-    setLiked(!liked);
-    // TODO: Persist to database
+  const handleLike = async () => {
+    if (!user) {
+      alert('Please sign in to like songs');
+      return;
+    }
+    if (isLiking) return;
+    
+    setIsLiking(true);
+    
+    if (liked) {
+      // Unlike
+      const success = await unlikeSong(song.id, user.id);
+      if (success) {
+        setLiked(false);
+        setLikeCount(prev => Math.max(0, prev - 1));
+      }
+    } else {
+      // Like
+      const success = await likeSong(song.id, user.id);
+      if (success) {
+        setLiked(true);
+        setLikeCount(prev => prev + 1);
+      }
+    }
+    
+    setIsLiking(false);
   };
 
   const handleSubmitComment = async () => {
@@ -464,7 +503,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
               }}
             >
               <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
-              <span>{liked ? song.upvotes + 1 : song.upvotes}</span>
+              <span>{likeCount}</span>
             </button>
 
             {/* Share button */}

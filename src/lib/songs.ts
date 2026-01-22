@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { SongLocation } from '../types';
+import type { SongLocation, SongStatus } from '../types';
 import { londonSongs } from '../data/londonSongs';
 
 // Convert database row to SongLocation type
@@ -21,7 +21,9 @@ function dbToSong(row: any): SongLocation {
     tags: row.tags || [],
     userId: row.user_id,
     submittedBy: row.submitted_by,
-    submittedAt: row.created_at ? new Date(row.created_at) : undefined
+    submittedAt: row.created_at ? new Date(row.created_at) : undefined,
+    status: row.status || 'live',
+    adminNotes: row.admin_notes
   };
 }
 
@@ -44,6 +46,8 @@ function songToDb(song: Partial<SongLocation> & { id?: string }) {
   if (song.tags !== undefined) db.tags = song.tags;
   if (song.userId !== undefined) db.user_id = song.userId;
   if (song.submittedBy !== undefined) db.submitted_by = song.submittedBy;
+  if (song.status !== undefined) db.status = song.status;
+  if (song.adminNotes !== undefined) db.admin_notes = song.adminNotes;
   db.updated_at = new Date().toISOString();
   return db;
 }
@@ -162,5 +166,220 @@ export async function deleteSong(songId: string): Promise<boolean> {
   } catch (err) {
     console.error('Failed to delete song:', err);
     return false;
+  }
+}
+
+// ============================================
+// LIKE SYSTEM
+// ============================================
+
+// Check if user has liked a song
+export async function hasUserLikedSong(songId: string, userId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { data, error } = await supabase
+      .from('song_likes')
+      .select('id')
+      .eq('song_id', songId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Error checking like:', error);
+      return false;
+    }
+
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
+// Get like count for a song
+export async function getSongLikeCount(songId: string): Promise<number> {
+  if (!isSupabaseConfigured()) return 0;
+
+  try {
+    const { count, error } = await supabase
+      .from('song_likes')
+      .select('*', { count: 'exact', head: true })
+      .eq('song_id', songId);
+
+    if (error) {
+      console.error('Error getting like count:', error);
+      return 0;
+    }
+
+    return count || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Like a song
+export async function likeSong(songId: string, userId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { error } = await supabase
+      .from('song_likes')
+      .insert({ song_id: songId, user_id: userId });
+
+    if (error) {
+      if (error.code === '23505') { // Unique constraint violation = already liked
+        console.log('User already liked this song');
+        return false;
+      }
+      console.error('Error liking song:', error);
+      return false;
+    }
+
+    // Update the upvotes count in the songs table
+    try {
+      await supabase.rpc('increment_upvotes', { target_song_id: songId });
+    } catch {
+      // RPC might not exist, that's ok
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Failed to like song:', err);
+    return false;
+  }
+}
+
+// Unlike a song
+export async function unlikeSong(songId: string, userId: string): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const { error } = await supabase
+      .from('song_likes')
+      .delete()
+      .eq('song_id', songId)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error unliking song:', error);
+      return false;
+    }
+
+    // Decrement the upvotes count in the songs table
+    try {
+      await supabase.rpc('decrement_upvotes', { target_song_id: songId });
+    } catch {
+      // RPC might not exist, that's ok
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Failed to unlike song:', err);
+    return false;
+  }
+}
+
+// Get user's liked song IDs (for bulk checking)
+export async function getUserLikedSongIds(userId: string): Promise<string[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('song_likes')
+      .select('song_id')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Error getting user likes:', error);
+      return [];
+    }
+
+    return data?.map(row => row.song_id) || [];
+  } catch {
+    return [];
+  }
+}
+
+// ============================================
+// USER SUBMISSIONS
+// ============================================
+
+// Fetch songs submitted by a specific user
+export async function fetchUserSongs(userId: string): Promise<SongLocation[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('songs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching user songs:', error);
+      return [];
+    }
+
+    return data?.map(dbToSong) || [];
+  } catch (err) {
+    console.error('Failed to fetch user songs:', err);
+    return [];
+  }
+}
+
+// ============================================
+// ADMIN REVIEW
+// ============================================
+
+// Update song status (admin only)
+export async function setSongStatus(
+  songId: string, 
+  status: SongStatus, 
+  adminNotes?: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+
+  try {
+    const updates: any = { status };
+    if (adminNotes !== undefined) {
+      updates.admin_notes = adminNotes;
+    }
+
+    const { error } = await supabase
+      .from('songs')
+      .update(updates)
+      .eq('id', songId);
+
+    if (error) {
+      console.error('Error updating song status:', error);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Failed to update song status:', err);
+    return false;
+  }
+}
+
+// Fetch all songs for admin review (including non-live)
+export async function fetchAllSongsAdmin(): Promise<SongLocation[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('songs')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching songs for admin:', error);
+      return [];
+    }
+
+    return data?.map(dbToSong) || [];
+  } catch (err) {
+    console.error('Failed to fetch songs for admin:', err);
+    return [];
   }
 }

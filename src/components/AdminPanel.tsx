@@ -13,13 +13,20 @@ import {
   Camera,
   Check,
   XCircle,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Eye,
+  EyeOff,
+  MessageSquare,
+  Send,
+  RefreshCw,
+  User
 } from 'lucide-react';
 import { SpotifySearch } from './SpotifySearch';
-import type { SongLocation, SongPhoto } from '../types';
+import type { SongLocation, SongPhoto, SongStatus } from '../types';
 import type { SpotifyTrack } from '../lib/spotify';
 import { getTrackInfo } from '../lib/spotify';
 import { getPendingPhotos, approvePhoto, rejectPhoto } from '../lib/comments';
+import { setSongStatus, fetchAllSongsAdmin } from '../lib/songs';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -27,17 +34,36 @@ interface AdminPanelProps {
   songs: SongLocation[];
   onUpdateSong: (songId: string, updates: Partial<SongLocation>) => void;
   onDeleteSong: (songId: string) => void;
+  onRefreshSongs?: () => void;
 }
 
-export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong }: AdminPanelProps) {
+export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong, onRefreshSongs }: AdminPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSong, setEditingSong] = useState<SongLocation | null>(null);
   const [showSpotifySearch, setShowSpotifySearch] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'songs' | 'photos'>('songs');
+  const [activeTab, setActiveTab] = useState<'songs' | 'review' | 'photos'>('songs');
   const [pendingPhotos, setPendingPhotos] = useState<SongPhoto[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState<string | null>(null);
+  
+  // Review state
+  const [allSongs, setAllSongs] = useState<SongLocation[]>([]);
+  const [loadingAllSongs, setLoadingAllSongs] = useState(false);
+  const [editNotesFor, setEditNotesFor] = useState<string | null>(null);
+  const [adminNotes, setAdminNotes] = useState('');
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+
+  // Load all songs for review tab
+  useEffect(() => {
+    if (activeTab === 'review' && allSongs.length === 0) {
+      setLoadingAllSongs(true);
+      fetchAllSongsAdmin().then(songs => {
+        setAllSongs(songs);
+        setLoadingAllSongs(false);
+      });
+    }
+  }, [activeTab, allSongs.length]);
 
   // Load pending photos when tab changes
   useEffect(() => {
@@ -49,6 +75,28 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
       });
     }
   }, [activeTab, pendingPhotos.length]);
+
+  // Handle status change
+  const handleStatusChange = async (songId: string, status: SongStatus, notes?: string) => {
+    setProcessingStatus(songId);
+    const success = await setSongStatus(songId, status, notes);
+    if (success) {
+      setAllSongs(allSongs.map(s => 
+        s.id === songId ? { ...s, status, adminNotes: notes || s.adminNotes } : s
+      ));
+      setEditNotesFor(null);
+      setAdminNotes('');
+      onRefreshSongs?.();
+    }
+    setProcessingStatus(null);
+  };
+
+  const refreshAllSongs = async () => {
+    setLoadingAllSongs(true);
+    const songs = await fetchAllSongsAdmin();
+    setAllSongs(songs);
+    setLoadingAllSongs(false);
+  };
 
   const handleApprovePhoto = async (photoId: string) => {
     setProcessingPhoto(photoId);
@@ -203,6 +251,39 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
           >
             <Music size={16} />
             Songs
+          </button>
+          <button
+            onClick={() => setActiveTab('review')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: activeTab === 'review' ? 'var(--color-dark-lighter)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              color: activeTab === 'review' ? 'white' : 'var(--color-text-muted)',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              position: 'relative'
+            }}
+          >
+            <Eye size={16} />
+            Review
+            {allSongs.filter(s => s.status !== 'live').length > 0 && (
+              <span style={{
+                background: '#f59e0b',
+                color: 'var(--color-dark)',
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: '10px',
+                marginLeft: '4px'
+              }}>
+                {allSongs.filter(s => s.status !== 'live').length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('photos')}
@@ -465,6 +546,273 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
               </div>
             )}
           </div>
+        </div>
+        )}
+
+        {/* Review tab */}
+        {activeTab === 'review' && (
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 24px'
+        }}>
+          {/* Refresh button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+            <button
+              onClick={refreshAllSongs}
+              disabled={loadingAllSongs}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                background: 'var(--color-dark-lighter)',
+                border: 'none',
+                borderRadius: '8px',
+                color: 'var(--color-text-muted)',
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              <RefreshCw size={14} className={loadingAllSongs ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+          </div>
+
+          {loadingAllSongs ? (
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              <Loader size={24} className="animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {allSongs.map(song => {
+                const statusColor = song.status === 'live' ? '#10b981' : 
+                                   song.status === 'needs_edit' ? '#f59e0b' : '#ef4444';
+                const statusLabel = song.status === 'live' ? 'Live' : 
+                                   song.status === 'needs_edit' ? 'Needs Edit' : 'Removed';
+                
+                return (
+                  <div 
+                    key={song.id}
+                    style={{
+                      padding: '16px',
+                      background: 'var(--color-dark-lighter)',
+                      borderRadius: '12px',
+                      borderLeft: `4px solid ${statusColor}`
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                      {/* Album art */}
+                      <div style={{
+                        width: '56px',
+                        height: '56px',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--color-dark-card)'
+                      }}>
+                        <img 
+                          src={song.albumArt} 
+                          alt={song.title}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200';
+                          }}
+                        />
+                      </div>
+
+                      {/* Song info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <h3 style={{ fontWeight: 500, fontSize: '15px', margin: 0 }}>
+                            {song.title}
+                          </h3>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background: `${statusColor}30`,
+                            color: statusColor
+                          }}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '2px 0' }}>
+                          {song.artist}
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={12} />
+                            {song.locationName}
+                          </span>
+                          {song.submittedBy && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <User size={12} />
+                              {song.submittedBy}
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Admin notes display */}
+                        {song.adminNotes && (
+                          <div style={{
+                            marginTop: '8px',
+                            padding: '8px 12px',
+                            background: 'rgba(245, 158, 11, 0.1)',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            color: '#f59e0b'
+                          }}>
+                            <strong>Note:</strong> {song.adminNotes}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                        {processingStatus === song.id ? (
+                          <Loader size={20} className="animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+                        ) : (
+                          <>
+                            {song.status !== 'live' && (
+                              <button
+                                onClick={() => handleStatusChange(song.id, 'live')}
+                                title="Make Live"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 12px',
+                                  background: 'rgba(16, 185, 129, 0.2)',
+                                  color: '#10b981',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Eye size={14} />
+                                Make Live
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditNotesFor(song.id);
+                                setAdminNotes(song.adminNotes || '');
+                              }}
+                              title="Request Edit"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '6px 12px',
+                                background: 'rgba(245, 158, 11, 0.2)',
+                                color: '#f59e0b',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <MessageSquare size={14} />
+                              Request Edit
+                            </button>
+                            {song.status !== 'removed' && (
+                              <button
+                                onClick={() => handleStatusChange(song.id, 'removed')}
+                                title="Remove"
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '6px 12px',
+                                  background: 'rgba(239, 68, 68, 0.2)',
+                                  color: '#f87171',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <EyeOff size={14} />
+                                Remove
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Edit notes input */}
+                    {editNotesFor === song.id && (
+                      <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                        <input
+                          type="text"
+                          value={adminNotes}
+                          onChange={(e) => setAdminNotes(e.target.value)}
+                          placeholder="Add notes for the user (e.g., 'Please fix the location')"
+                          style={{
+                            flex: 1,
+                            padding: '10px 14px',
+                            background: 'var(--color-dark-card)',
+                            border: '1px solid var(--color-dark-lighter)',
+                            borderRadius: '8px',
+                            color: 'var(--color-text)',
+                            fontSize: '14px'
+                          }}
+                        />
+                        <button
+                          onClick={() => handleStatusChange(song.id, 'needs_edit', adminNotes)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '10px 16px',
+                            background: '#f59e0b',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            fontWeight: 500,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Send size={14} />
+                          Send
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditNotesFor(null);
+                            setAdminNotes('');
+                          }}
+                          style={{
+                            padding: '10px',
+                            background: 'none',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {allSongs.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--color-text-muted)' }}>
+                  No songs to review.
+                </div>
+              )}
+            </div>
+          )}
         </div>
         )}
 

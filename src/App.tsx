@@ -8,6 +8,7 @@ import { SubmitSongModal } from './components/SubmitSongModal';
 import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
+import { MySubmissions } from './components/MySubmissions';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlayerContext';
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
@@ -29,6 +30,7 @@ function AppContent() {
   const [showDetailPanel, setShowDetailPanel] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showMySubmissions, setShowMySubmissions] = useState(false);
   const [radius, setRadius] = useState(5);
   
   // User location (default to central London)
@@ -119,6 +121,12 @@ function AppContent() {
     
     loadSongs();
     initCache();
+  }, []);
+
+  // Refresh songs (for admin panel)
+  const refreshSongs = useCallback(async () => {
+    const data = await fetchSongs();
+    setSongs(data);
   }, []);
 
   // Preload album art images into browser cache when songs change
@@ -283,6 +291,7 @@ function AppContent() {
         onSubmitClick={() => user ? setShowSubmitModal(true) : setShowAuthModal(true)} 
         onLoginClick={() => setShowAuthModal(true)}
         onAdminClick={() => setShowAdminPanel(true)}
+        onMySubmissionsClick={() => user ? setShowMySubmissions(true) : setShowAuthModal(true)}
       />
 
       {/* Map */}
@@ -343,6 +352,13 @@ function AppContent() {
         songs={songs}
         onUpdateSong={handleUpdateSong}
         onDeleteSong={handleDeleteSong}
+        onRefreshSongs={refreshSongs}
+      />
+
+      {/* My Submissions */}
+      <MySubmissions
+        isOpen={showMySubmissions}
+        onClose={() => setShowMySubmissions(false)}
       />
     </div>
   );

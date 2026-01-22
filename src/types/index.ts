@@ -1,3 +1,5 @@
+export type SongStatus = 'live' | 'needs_edit' | 'removed';
+
 export interface SongLocation {
   id: string;
   title: string;
@@ -17,6 +19,18 @@ export interface SongLocation {
   upvotes: number;
   verified: boolean;
   tags?: string[];
+  // Review system
+  status?: SongStatus;
+  adminNotes?: string;
+  // Client-side like state
+  hasLiked?: boolean;
+}
+
+export interface SongLike {
+  id: string;
+  songId: string;
+  userId: string;
+  createdAt: Date;
 }
 
 export interface SongComment {
