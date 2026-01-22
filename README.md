@@ -17,10 +17,13 @@ A location-based music discovery app that connects songs to places. Explore a ma
 - **Build Tool**: Vite 5
 - **Styling**: CSS with custom design system
 - **Maps**: Mapbox GL JS via react-map-gl
-- **Music**: Spotify Web API + Web Playback SDK
-- **Database**: Supabase (PostgreSQL)
+- **Geocoding**: Mapbox Geocoding API
+- **Music**: Spotify Web API + Web Playback SDK (full playback for Premium users)
+- **Database**: Supabase (PostgreSQL) with Row Level Security
 - **Auth**: Supabase Auth (email/password + OAuth)
+- **Storage**: Supabase Storage (for user-uploaded photos)
 - **Icons**: Lucide React
+- **Deployment**: Vercel (free tier)
 
 ## Getting Started
 
@@ -58,15 +61,32 @@ A location-based music discovery app that connects songs to places. Explore a ma
 
 4. **Set up the database**
    
-   Run the SQL migration in your Supabase SQL Editor:
-   - Open `supabase-auth-migration.sql`
-   - Execute the SQL to create tables, triggers, and RLS policies
+   Run these SQL migrations in order in your Supabase SQL Editor:
+   1. `supabase-auth-migration.sql` - Auth tables, profiles, and RLS policies
+   2. `supabase-comments-photos-migration.sql` - Comments and photos tables
+   3. `supabase-songs-review-migration.sql` - Song review system and likes
+   
+   Then create the storage bucket:
+   - Go to Supabase Storage
+   - Create a new bucket named `song-photos`
+   - Make it **public**
 
 5. **Configure authentication (optional)**
    
    For OAuth providers (Google, Discord, Facebook), follow the detailed guide in [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md).
 
-6. **Start the development server**
+6. **Configure Spotify (required for full playback)**
+   
+   1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+   2. Create a new app
+   3. Add redirect URIs:
+      - `http://localhost:5174/callback` (local dev)
+      - `https://your-domain.vercel.app/callback` (production)
+   4. Copy the **Client ID** to your `.env` file
+   
+   > **Note**: Full song playback requires Spotify Premium. Free users get 30-second previews.
+
+7. **Start the development server**
    ```bash
    npm run dev
    ```
@@ -110,16 +130,26 @@ src/
 
 ### Tables
 
-- **songs** - Song entries with location data, Spotify metadata, and user ownership
+- **songs** - Song entries with location data, Spotify metadata, user ownership, status, and upvotes
 - **profiles** - User profiles with display name, avatar, and admin status
 - **song_comments** - User comments on songs
 - **song_photos** - User-uploaded photos with admin approval workflow
+- **song_likes** - Upvote tracking (one like per user per song)
 
 ### Row Level Security
 
-- Anyone can read songs
+- Anyone can read `live` songs; users can read their own (any status); admins can read all
 - Authenticated users can create songs and edit/delete their own
-- Admins can manage all songs
+- Admins can manage all songs and change status
+- Users can only delete their own comments
+- Photo uploads require authentication; only approved photos are publicly visible
+
+### Database Functions
+
+- `get_song_like_count(song_id)` - Get total likes for a song
+- `has_user_liked_song(song_id, user_id)` - Check if user liked a song
+- `increment_upvotes(song_id)` - Increment song's upvote count
+- `decrement_upvotes(song_id)` - Decrement song's upvote count (min 0)
 
 ## Authentication
 
@@ -139,10 +169,13 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 | `VITE_SUPABASE_URL` | Yes | Your Supabase project URL |
 | `VITE_SUPABASE_ANON_KEY` | Yes | Your Supabase anonymous key |
 | `VITE_MAPBOX_TOKEN` | Yes | Mapbox public access token |
-| `VITE_SPOTIFY_CLIENT_ID` | No | Spotify app client ID |
-| `VITE_SPOTIFY_CLIENT_SECRET` | No | Spotify app client secret |
+| `VITE_SPOTIFY_CLIENT_ID` | **Yes** | Spotify app client ID (required for full playback) |
+| `VITE_SPOTIFY_CLIENT_SECRET` | No | Spotify app client secret (optional, for search) |
 
-> **Note**: Without Spotify credentials, the app uses mock search results for song lookup.
+> **Notes**: 
+> - Without Spotify Client ID, users cannot connect for full playback
+> - Without Spotify Client Secret, the app uses mock search results for song lookup
+> - **Spotify Premium required** for full song playback (Web Playback SDK); Free users get 30-second previews
 
 ## Roadmap
 
@@ -150,28 +183,34 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| Interactive Map | Mapbox-powered map with song markers | Done |
-| Music Player | Spotify embed player for song playback | Done |
-| Song Discovery | Browse songs by location with radius filtering | Done |
-| Song Submission | 2-step wizard with Spotify search and location picker | Done |
-| Location Search | Search addresses/places using Mapbox Geocoding | Done |
-| Spotify Search | Search songs by name (with URL fallback) | Done |
-| Real Authentication | Email/password + OAuth (Google, Discord, Facebook) | Done |
-| User Profiles | Auto-created profiles with avatar and display name | Done |
-| Song Ownership | Songs linked to users with RLS policies | Done |
-| Admin Panel | Manage songs, verify submissions, approve photos | Done |
-| Song Detail Panel | Redesigned with hero album art, dynamic gradients, action bar | Done |
-| Comments | Leave comments on song locations | Done |
-| Location Photos | Upload photos with admin approval workflow | Done |
+| Interactive Map | Mapbox-powered map with song markers | ✅ Done |
+| Music Player | Spotify embed + Web Playback SDK for Premium users | ✅ Done |
+| Song Discovery | Browse songs by location with radius filtering | ✅ Done |
+| Song Submission | 2-step wizard with Spotify search and location picker | ✅ Done |
+| Location Search | Search addresses/places using Mapbox Geocoding | ✅ Done |
+| Spotify Search | Search songs by name (with URL fallback) | ✅ Done |
+| Real Authentication | Email/password + OAuth (Google, Discord, Facebook) | ✅ Done |
+| User Profiles | Auto-created profiles with avatar and display name | ✅ Done |
+| Song Ownership | Songs linked to users with RLS policies | ✅ Done |
+| Admin Panel | Manage songs, review submissions, approve photos | ✅ Done |
+| Song Detail Panel | Redesigned with hero album art, dynamic gradients, tabs | ✅ Done |
+| Comments | Leave comments on song locations | ✅ Done |
+| Location Photos | Upload photos with admin approval workflow | ✅ Done |
+| Song Review System | Admin can flag songs for editing with notes | ✅ Done |
+| My Submissions | Users can view and edit their submitted songs | ✅ Done |
+| Upvote System | Reddit-style likes (one per user) with counter | ✅ Done |
+| Discovery Panel | Near Me vs Map Center modes for global exploration | ✅ Done |
+| Radius Visualization | Subtle circle overlay showing discovery area | ✅ Done |
+| Full Spotify Playback | Web Playback SDK with OAuth (Premium users only) | ✅ Done |
 
 ### Planned
 
-| Feature | Description | Status | Priority |
-|---------|-------------|--------|----------|
-| My Submissions | View and manage your submitted songs | Planned | High |
-| Profile Editing | Update display name and avatar | Planned | High |
-| Drag Marker | Drag-to-reposition in location picker | Planned | Medium |
-| Mobile Responsiveness | Optimise UI for mobile devices | Planned | Medium |
+| Feature | Description | Priority |
+|---------|-------------|----------|
+| Profile Editing | Update display name and avatar | High |
+| Drag Marker | Drag-to-reposition in location picker | Medium |
+| Mobile Responsiveness | Optimize UI for mobile devices | Medium |
+| Real Spotify Search | Enable when Spotify API signup reopens | Medium |
 
 ### Suggested
 
