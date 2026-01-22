@@ -19,6 +19,30 @@ export interface SongLocation {
   tags?: string[];
 }
 
+export interface SongComment {
+  id: string;
+  songId: string;
+  userId: string;
+  content: string;
+  createdAt: Date;
+  // Joined from profiles
+  userDisplayName?: string;
+  userAvatarUrl?: string;
+}
+
+export interface SongPhoto {
+  id: string;
+  songId: string;
+  userId: string;
+  photoUrl: string;
+  caption?: string;
+  approved: boolean;
+  rejected: boolean;
+  createdAt: Date;
+  // Joined from profiles
+  userDisplayName?: string;
+}
+
 export interface UserLocation {
   latitude: number;
   longitude: number;
