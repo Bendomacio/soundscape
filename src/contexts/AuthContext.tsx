@@ -110,10 +110,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          const profileData = await fetchProfile(session.user.id);
-          if (isMounted && profileData) {
-            setProfile(profileData);
-            setIsAdmin(profileData.is_admin);
+          try {
+            const profileData = await fetchProfile(session.user.id);
+            if (isMounted && profileData) {
+              setProfile(profileData);
+              setIsAdmin(profileData.is_admin);
+            }
+          } catch (err) {
+            console.error('Failed to fetch profile on auth change:', err);
           }
         } else {
           setProfile(null);

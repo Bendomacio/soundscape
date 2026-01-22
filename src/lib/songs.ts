@@ -54,7 +54,7 @@ function isSupabaseConfigured(): boolean {
   return Boolean(url && !url.includes('your-project'));
 }
 
-// Fetch all songs
+// Fetch all songs with timeout
 export async function fetchSongs(): Promise<SongLocation[]> {
   if (!isSupabaseConfigured()) {
     console.log('Supabase not configured, using mock data');
@@ -62,10 +62,17 @@ export async function fetchSongs(): Promise<SongLocation[]> {
   }
 
   try {
-    const { data, error } = await supabase
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Fetch songs timeout')), 10000)
+    );
+
+    const fetchPromise = supabase
       .from('songs')
       .select('*')
       .order('created_at', { ascending: true });
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (error) {
       console.error('Error fetching songs:', error);
