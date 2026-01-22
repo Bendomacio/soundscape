@@ -12,9 +12,103 @@ import { MySubmissions } from './components/MySubmissions';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlayerContext';
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
-import { getTrackInfo } from './lib/spotify';
+import { getTrackInfo, handleSpotifyCallback } from './lib/spotify';
 import { preloadImages, clearOldCache } from './lib/imageCache';
 import type { SongLocation, MapViewState } from './types';
+
+// Handle Spotify OAuth callback
+function SpotifyCallbackHandler() {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const errorParam = params.get('error');
+
+    // Check if this is a callback from Spotify
+    if (window.location.pathname === '/callback' || code) {
+      if (errorParam) {
+        setError('Spotify authorization was denied');
+        // Clear URL params
+        window.history.replaceState({}, '', '/');
+        return;
+      }
+
+      if (code && !isProcessing) {
+        setIsProcessing(true);
+        handleSpotifyCallback(code)
+          .then((auth) => {
+            if (auth) {
+              console.log('Spotify connected successfully!');
+              // Force reload to re-initialize player with new auth
+              window.location.href = '/';
+            } else {
+              setError('Failed to connect to Spotify');
+              window.history.replaceState({}, '', '/');
+            }
+          })
+          .catch((err) => {
+            console.error('Callback error:', err);
+            setError('Failed to connect to Spotify');
+            window.history.replaceState({}, '', '/');
+          })
+          .finally(() => setIsProcessing(false));
+      }
+    }
+  }, [isProcessing]);
+
+  if (isProcessing) {
+    return (
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--color-dark)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '16px',
+        zIndex: 9999
+      }}>
+        <div className="animate-spin" style={{
+          width: 48,
+          height: 48,
+          border: '3px solid var(--color-dark-lighter)',
+          borderTopColor: '#1DB954',
+          borderRadius: '50%'
+        }} />
+        <p style={{ color: 'var(--color-text)' }}>Connecting to Spotify...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        padding: '12px',
+        background: '#ef4444',
+        color: 'white',
+        textAlign: 'center',
+        zIndex: 9999
+      }}>
+        {error}
+        <button 
+          onClick={() => setError(null)}
+          style={{ marginLeft: '12px', textDecoration: 'underline', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
 
 function AppContent() {
   // Auth & Spotify player
@@ -430,6 +524,7 @@ function App() {
   return (
     <AuthProvider>
       <SpotifyPlayerProvider>
+        <SpotifyCallbackHandler />
         <AppContent />
       </SpotifyPlayerProvider>
     </AuthProvider>

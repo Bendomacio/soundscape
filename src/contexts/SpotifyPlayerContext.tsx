@@ -1,19 +1,40 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { SongLocation } from '../types';
+import { 
+  getSpotifyUserAuth, 
+  isSpotifyConnected, 
+  initiateSpotifyLogin, 
+  clearSpotifyAuth,
+  getSpotifyUserProfile,
+  type SpotifyUserAuth 
+} from '../lib/spotify';
 
 interface SpotifyPlayerState {
   currentSong: SongLocation | null;
   isPlaying: boolean;
   isLoading: boolean;
   error: string | null;
+  position: number;
+  duration: number;
+}
+
+interface SpotifyConnection {
+  isConnected: boolean;
+  isPremium: boolean;
+  userName: string | null;
+  isConnecting: boolean;
 }
 
 interface SpotifyPlayerContextType extends SpotifyPlayerState {
+  connection: SpotifyConnection;
   play: (song: SongLocation) => void;
   pause: () => void;
   resume: () => void;
   togglePlayPause: () => void;
   stop: () => void;
+  seek: (position: number) => void;
+  connectSpotify: () => void;
+  disconnectSpotify: () => void;
 }
 
 const SpotifyPlayerContext = createContext<SpotifyPlayerContextType | null>(null);
@@ -26,18 +47,187 @@ export function useSpotifyPlayer() {
   return context;
 }
 
+// Spotify Web Playback SDK types
+interface SpotifyPlayer {
+  connect: () => Promise<boolean>;
+  disconnect: () => void;
+  addListener: (event: string, callback: (data: any) => void) => void;
+  removeListener: (event: string) => void;
+  getCurrentState: () => Promise<any>;
+  setName: (name: string) => void;
+  getVolume: () => Promise<number>;
+  setVolume: (volume: number) => Promise<void>;
+  pause: () => Promise<void>;
+  resume: () => Promise<void>;
+  togglePlay: () => Promise<void>;
+  seek: (positionMs: number) => Promise<void>;
+  previousTrack: () => Promise<void>;
+  nextTrack: () => Promise<void>;
+  activateElement: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    onSpotifyWebPlaybackSDKReady: () => void;
+    Spotify: {
+      Player: new (options: {
+        name: string;
+        getOAuthToken: (cb: (token: string) => void) => void;
+        volume?: number;
+      }) => SpotifyPlayer;
+    };
+    onSpotifyIframeApiReady: (IFrameAPI: any) => void;
+    SpotifyIFrameAPI: any;
+  }
+}
+
 export function SpotifyPlayerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SpotifyPlayerState>({
     currentSong: null,
     isPlaying: false,
     isLoading: false,
-    error: null
+    error: null,
+    position: 0,
+    duration: 0
   });
 
+  const [connection, setConnection] = useState<SpotifyConnection>({
+    isConnected: false,
+    isPremium: false,
+    userName: null,
+    isConnecting: false
+  });
+
+  const playerRef = useRef<SpotifyPlayer | null>(null);
+  const deviceIdRef = useRef<string | null>(null);
   const embedControllerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const authRef = useRef<SpotifyUserAuth | null>(null);
+  const positionIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load Spotify IFrame API on mount
+  // Check connection status on mount
+  useEffect(() => {
+    checkConnection();
+  }, []);
+
+  async function checkConnection() {
+    if (!isSpotifyConnected()) {
+      setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+      return;
+    }
+
+    setConnection(prev => ({ ...prev, isConnecting: true }));
+
+    const auth = await getSpotifyUserAuth();
+    if (!auth) {
+      setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+      return;
+    }
+
+    authRef.current = auth;
+
+    // Get user profile to check premium status
+    const profile = await getSpotifyUserProfile();
+    if (profile) {
+      setConnection({
+        isConnected: true,
+        isPremium: profile.product === 'premium',
+        userName: profile.display_name,
+        isConnecting: false
+      });
+
+      // Initialize Web Playback SDK if premium
+      if (profile.product === 'premium') {
+        initializeWebPlaybackSDK();
+      }
+    } else {
+      setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+    }
+  }
+
+  // Initialize Web Playback SDK
+  function initializeWebPlaybackSDK() {
+    if (playerRef.current) return;
+
+    // Load SDK script if not present
+    if (!window.Spotify) {
+      const script = document.createElement('script');
+      script.src = 'https://sdk.scdn.co/spotify-player.js';
+      script.async = true;
+      document.body.appendChild(script);
+
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        createPlayer();
+      };
+    } else {
+      createPlayer();
+    }
+  }
+
+  async function createPlayer() {
+    const auth = await getSpotifyUserAuth();
+    if (!auth) return;
+
+    const player = new window.Spotify.Player({
+      name: 'Soundscape Player',
+      getOAuthToken: async (cb) => {
+        const currentAuth = await getSpotifyUserAuth();
+        if (currentAuth) {
+          cb(currentAuth.accessToken);
+        }
+      },
+      volume: 0.5
+    });
+
+    player.addListener('ready', ({ device_id }: { device_id: string }) => {
+      console.log('Spotify Player ready with device ID:', device_id);
+      deviceIdRef.current = device_id;
+    });
+
+    player.addListener('not_ready', ({ device_id }: { device_id: string }) => {
+      console.log('Device has gone offline:', device_id);
+      deviceIdRef.current = null;
+    });
+
+    player.addListener('player_state_changed', (state: any) => {
+      if (!state) return;
+      
+      const { paused, position, duration, track_window } = state;
+      const currentTrack = track_window?.current_track;
+      
+      setState(prev => ({
+        ...prev,
+        isPlaying: !paused,
+        isLoading: false,
+        position,
+        duration
+      }));
+    });
+
+    player.addListener('initialization_error', ({ message }: { message: string }) => {
+      console.error('Spotify initialization error:', message);
+      setState(prev => ({ ...prev, error: message }));
+    });
+
+    player.addListener('authentication_error', ({ message }: { message: string }) => {
+      console.error('Spotify auth error:', message);
+      clearSpotifyAuth();
+      setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+    });
+
+    player.addListener('playback_error', ({ message }: { message: string }) => {
+      console.error('Spotify playback error:', message);
+      setState(prev => ({ ...prev, error: message, isLoading: false }));
+    });
+
+    const connected = await player.connect();
+    if (connected) {
+      playerRef.current = player;
+      console.log('Spotify Player connected successfully');
+    }
+  }
+
+  // Load IFrame API as fallback
   useEffect(() => {
     if ((window as any).SpotifyIFrameAPI) return;
 
@@ -52,42 +242,88 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     document.body.appendChild(script);
   }, []);
 
-  const play = useCallback((song: SongLocation) => {
+  // Position tracking interval
+  useEffect(() => {
+    if (state.isPlaying && playerRef.current) {
+      positionIntervalRef.current = setInterval(async () => {
+        const playerState = await playerRef.current?.getCurrentState();
+        if (playerState) {
+          setState(prev => ({ ...prev, position: playerState.position }));
+        }
+      }, 1000);
+    } else {
+      if (positionIntervalRef.current) {
+        clearInterval(positionIntervalRef.current);
+      }
+    }
+
+    return () => {
+      if (positionIntervalRef.current) {
+        clearInterval(positionIntervalRef.current);
+      }
+    };
+  }, [state.isPlaying]);
+
+  const playWithSDK = useCallback(async (song: SongLocation) => {
+    const trackId = song.spotifyUri?.replace('spotify:track:', '');
+    if (!trackId || !deviceIdRef.current) {
+      console.error('No track ID or device ID');
+      return false;
+    }
+
+    const auth = await getSpotifyUserAuth();
+    if (!auth) return false;
+
+    try {
+      const response = await fetch(
+        `https://api.spotify.com/v1/me/player/play?device_id=${deviceIdRef.current}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${auth.accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            uris: [`spotify:track:${trackId}`]
+          })
+        }
+      );
+
+      if (response.status === 204 || response.ok) {
+        return true;
+      }
+
+      console.error('Play failed:', response.status);
+      return false;
+    } catch (error) {
+      console.error('Failed to play track:', error);
+      return false;
+    }
+  }, []);
+
+  const playWithEmbed = useCallback((song: SongLocation) => {
     const trackId = song.spotifyUri?.replace('spotify:track:', '');
     const uri = `spotify:track:${trackId}`;
     
     if (!trackId) {
-      setState({
+      setState(prev => ({
+        ...prev,
         currentSong: song,
         isPlaying: false,
         isLoading: false,
         error: 'No Spotify track ID'
-      });
+      }));
       return;
     }
-
-    setState({
-      currentSong: song,
-      isPlaying: false,
-      isLoading: true,
-      error: null
-    });
 
     // Reuse existing controller if available
     if (embedControllerRef.current) {
       try {
         embedControllerRef.current.loadUri(uri);
-        setTimeout(() => {
-          try {
-            embedControllerRef.current?.play();
-            setState(prev => ({ ...prev, isPlaying: true, isLoading: false }));
-          } catch (e) {
-            console.error('Play failed:', e);
-          }
-        }, 300);
+        embedControllerRef.current.play();
+        setState(prev => ({ ...prev, isPlaying: true, isLoading: false }));
         return;
       } catch (e) {
-        // loadUri failed, destroy and create new
         try { embedControllerRef.current.destroy(); } catch {}
         embedControllerRef.current = null;
       }
@@ -95,90 +331,115 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
 
     const container = containerRef.current;
     if (!container) {
-      setTimeout(() => play(song), 100);
+      setTimeout(() => playWithEmbed(song), 100);
       return;
     }
     
     container.innerHTML = '';
 
-    setTimeout(() => {
-      const IFrameAPI = (window as any).SpotifyIFrameAPI;
-      
-      if (!IFrameAPI) {
-        // Fallback: regular iframe
-        const iframe = document.createElement('iframe');
-        iframe.src = `https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`;
-        iframe.width = '100%';
-        iframe.height = '80';
-        iframe.frameBorder = '0';
-        iframe.allow = 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture';
-        iframe.style.borderRadius = '12px';
-        container.appendChild(iframe);
-        iframe.onload = () => setState(prev => ({ ...prev, isLoading: false, isPlaying: true }));
-        return;
-      }
+    const IFrameAPI = (window as any).SpotifyIFrameAPI;
+    
+    if (!IFrameAPI) {
+      // Fallback: regular iframe
+      const iframe = document.createElement('iframe');
+      iframe.src = `https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`;
+      iframe.width = '100%';
+      iframe.height = '80';
+      iframe.frameBorder = '0';
+      iframe.allow = 'autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture';
+      iframe.style.borderRadius = '12px';
+      container.appendChild(iframe);
+      iframe.onload = () => setState(prev => ({ ...prev, isLoading: false, isPlaying: true }));
+      return;
+    }
 
-      const songId = song.id;
+    const songId = song.id;
 
-      IFrameAPI.createController(
-        container, 
-        { uri, width: '100%', height: 80 }, 
-        (controller: any) => {
-          embedControllerRef.current = controller;
+    IFrameAPI.createController(
+      container, 
+      { uri, width: '100%', height: 80 }, 
+      (controller: any) => {
+        embedControllerRef.current = controller;
+        
+        controller.addListener('playback_update', (e: any) => {
+          if (!e?.data || typeof e.data.isPaused !== 'boolean') return;
+          setState(prev => {
+            if (prev.currentSong?.id === songId) {
+              return { ...prev, isPlaying: !e.data.isPaused, isLoading: false };
+            }
+            return prev;
+          });
+        });
+
+        controller.addListener('ready', () => {
+          setState(prev => {
+            if (prev.currentSong?.id === songId) {
+              return { ...prev, isLoading: false };
+            }
+            return prev;
+          });
           
-          controller.addListener('playback_update', (e: any) => {
-            if (!e?.data || typeof e.data.isPaused !== 'boolean') return;
+          try {
+            controller.play();
             setState(prev => {
               if (prev.currentSong?.id === songId) {
-                return { ...prev, isPlaying: !e.data.isPaused, isLoading: false };
+                return { ...prev, isPlaying: true, isLoading: false };
               }
               return prev;
             });
-          });
-
-          controller.addListener('ready', () => {
-            setState(prev => {
-              if (prev.currentSong?.id === songId) {
-                return { ...prev, isLoading: false };
-              }
-              return prev;
-            });
-            
-            setTimeout(() => {
-              try {
-                controller.play();
-                setState(prev => {
-                  if (prev.currentSong?.id === songId) {
-                    return { ...prev, isPlaying: true, isLoading: false };
-                  }
-                  return prev;
-                });
-              } catch (e) {
-                console.error('Auto-play failed:', e);
-              }
-            }, 100);
-          });
-        }
-      );
-    }, 150);
+          } catch (e) {
+            console.error('Auto-play failed:', e);
+          }
+        });
+      }
+    );
   }, []);
 
-  const pause = useCallback(() => {
-    if (embedControllerRef.current) {
+  const play = useCallback(async (song: SongLocation) => {
+    setState({
+      currentSong: song,
+      isPlaying: false,
+      isLoading: true,
+      error: null,
+      position: 0,
+      duration: 0
+    });
+
+    // Try Web Playback SDK first if connected and premium
+    if (connection.isPremium && deviceIdRef.current) {
+      const success = await playWithSDK(song);
+      if (success) {
+        setState(prev => ({ ...prev, isPlaying: true, isLoading: false }));
+        return;
+      }
+    }
+
+    // Fallback to embed
+    playWithEmbed(song);
+  }, [connection.isPremium, playWithSDK, playWithEmbed]);
+
+  const pause = useCallback(async () => {
+    if (playerRef.current && connection.isPremium) {
+      await playerRef.current.pause();
+    } else if (embedControllerRef.current) {
       try { embedControllerRef.current.pause(); } catch {}
     }
     setState(prev => ({ ...prev, isPlaying: false }));
-  }, []);
+  }, [connection.isPremium]);
 
-  const resume = useCallback(() => {
-    if (embedControllerRef.current) {
+  const resume = useCallback(async () => {
+    if (playerRef.current && connection.isPremium) {
+      await playerRef.current.resume();
+    } else if (embedControllerRef.current) {
       try { embedControllerRef.current.resume(); } catch {}
     }
     setState(prev => ({ ...prev, isPlaying: true }));
-  }, []);
+  }, [connection.isPremium]);
 
-  const togglePlayPause = useCallback(() => {
-    if (embedControllerRef.current) {
+  const togglePlayPause = useCallback(async () => {
+    if (playerRef.current && connection.isPremium) {
+      await playerRef.current.togglePlay();
+    } else if (embedControllerRef.current) {
       try {
         embedControllerRef.current.togglePlay();
       } catch {
@@ -187,9 +448,19 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     } else if (state.currentSong) {
       play(state.currentSong);
     }
-  }, [state.isPlaying, state.currentSong, pause, resume, play]);
+  }, [connection.isPremium, state.isPlaying, state.currentSong, pause, resume, play]);
+
+  const seek = useCallback(async (position: number) => {
+    if (playerRef.current && connection.isPremium) {
+      await playerRef.current.seek(position);
+      setState(prev => ({ ...prev, position }));
+    }
+  }, [connection.isPremium]);
 
   const stop = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.pause();
+    }
     if (embedControllerRef.current) {
       try { embedControllerRef.current.destroy(); } catch {}
       embedControllerRef.current = null;
@@ -197,17 +468,47 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     if (containerRef.current) {
       containerRef.current.innerHTML = '';
     }
-    setState({ currentSong: null, isPlaying: false, isLoading: false, error: null });
+    setState({ currentSong: null, isPlaying: false, isLoading: false, error: null, position: 0, duration: 0 });
   }, []);
 
+  const connectSpotify = useCallback(() => {
+    initiateSpotifyLogin();
+  }, []);
+
+  const disconnectSpotify = useCallback(() => {
+    if (playerRef.current) {
+      playerRef.current.disconnect();
+      playerRef.current = null;
+    }
+    deviceIdRef.current = null;
+    clearSpotifyAuth();
+    setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+    stop();
+  }, [stop]);
+
+  // Show/hide embed container based on whether we're using embed
+  const showEmbed = state.currentSong && !connection.isPremium;
+
   return (
-    <SpotifyPlayerContext.Provider value={{ ...state, play, pause, resume, togglePlayPause, stop }}>
+    <SpotifyPlayerContext.Provider value={{ 
+      ...state, 
+      connection,
+      play, 
+      pause, 
+      resume, 
+      togglePlayPause,
+      seek,
+      stop,
+      connectSpotify,
+      disconnectSpotify
+    }}>
       {children}
+      {/* Embed container (only shown when not using Web Playback SDK) */}
       <div 
         ref={containerRef}
         style={{
           position: 'fixed',
-          bottom: state.currentSong ? '88px' : '-100px',
+          bottom: showEmbed ? '88px' : '-100px',
           left: '50%',
           transform: 'translateX(-50%)',
           width: 'calc(100% - 32px)',
@@ -216,16 +517,9 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
           transition: 'bottom 0.3s ease',
           borderRadius: '12px',
           overflow: 'hidden',
-          boxShadow: state.currentSong ? '0 -4px 20px rgba(0,0,0,0.4)' : 'none'
+          boxShadow: showEmbed ? '0 -4px 20px rgba(0,0,0,0.4)' : 'none'
         }}
       />
     </SpotifyPlayerContext.Provider>
   );
-}
-
-declare global {
-  interface Window {
-    onSpotifyIframeApiReady: (IFrameAPI: any) => void;
-    SpotifyIFrameAPI: any;
-  }
 }
