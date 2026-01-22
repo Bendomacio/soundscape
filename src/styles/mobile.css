@@ -83,6 +83,28 @@
     padding: var(--space-lg);
     padding-top: 0;
   }
+  
+  /* Song Detail Panel Mobile Optimization */
+  .song-detail-panel {
+    max-height: 95vh !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+  
+  .song-detail-content {
+    /* Ensure smooth scrolling on mobile */
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain;
+  }
+  
+  /* Hide scrollbar on mobile for cleaner look */
+  .song-detail-content::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .song-detail-content {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 /* ---- MOBILE BUTTONS ---- */

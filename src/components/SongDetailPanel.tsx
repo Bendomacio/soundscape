@@ -271,6 +271,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
       <div 
         ref={panelRef}
         onClick={e => e.stopPropagation()}
+        className="song-detail-panel"
         style={{
           position: 'relative',
           width: '100%',
@@ -279,7 +280,9 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
           background: 'var(--color-dark-card)',
           borderRadius: '24px',
           boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
         {/* Dynamic gradient header based on album colors */}
@@ -383,8 +386,19 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{ padding: '0 24px 24px', marginTop: '-40px', position: 'relative' }}>
+        {/* Scrollable Content */}
+        <div 
+          className="song-detail-content"
+          style={{ 
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: '0 24px 24px', 
+            marginTop: '-40px', 
+            position: 'relative',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
           {/* Song title and artist */}
           <div style={{ textAlign: 'center', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
