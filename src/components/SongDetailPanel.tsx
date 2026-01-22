@@ -154,7 +154,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
       if (comment) {
         // Add profile info from current user
         comment.userDisplayName = profile?.display_name || user.email || 'Anonymous';
-        comment.userAvatarUrl = profile?.avatar_url;
+        comment.userAvatarUrl = profile?.avatar_url ?? undefined;
         setComments([comment, ...comments]);
         setNewComment('');
       } else {

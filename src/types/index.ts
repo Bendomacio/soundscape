@@ -3,7 +3,7 @@ export interface SongLocation {
   title: string;
   artist: string;
   album?: string;
-  albumArt: string;
+  albumArt?: string;
   spotifyUri?: string;
   spotifyPreviewUrl?: string;
   latitude: number;

@@ -30,16 +30,18 @@ export function useCachedImage(originalUrl: string | undefined): {
 
     async function loadAndCache() {
       // Skip caching for data URLs or if Cache API not available
-      if (originalUrl.startsWith('data:') || !('caches' in window)) {
+      if (!originalUrl || originalUrl.startsWith('data:') || !('caches' in window)) {
         setIsLoading(false);
         return;
       }
+
+      const url = originalUrl; // Capture for closure
 
       try {
         const cache = await caches.open(CACHE_NAME);
         
         // Check if already cached
-        const cachedResponse = await cache.match(originalUrl);
+        const cachedResponse = await cache.match(url);
         
         if (cachedResponse) {
           const blob = await cachedResponse.blob();
@@ -50,11 +52,11 @@ export function useCachedImage(originalUrl: string | undefined): {
         }
 
         // Fetch and cache
-        const response = await fetch(originalUrl, { mode: 'cors' });
+        const response = await fetch(url, { mode: 'cors' });
         
         if (response.ok) {
           const responseToCache = response.clone();
-          await cache.put(originalUrl, responseToCache);
+          await cache.put(url, responseToCache);
           
           const blob = await response.blob();
           blobUrl = URL.createObjectURL(blob);

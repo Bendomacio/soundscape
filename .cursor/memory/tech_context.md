@@ -7,6 +7,7 @@
 - **Maps**: Mapbox GL JS via `react-map-gl`
 - **Music**: Spotify Web API + Web Playback SDK
 - **Database**: Supabase (PostgreSQL)
+- **Auth**: Supabase Auth (email/password + OAuth)
 - **Icons**: Lucide React
 
 ## Key Files & Structure
@@ -17,9 +18,10 @@ src/
 │   ├── MusicPlayer.tsx    # Spotify player UI
 │   ├── SubmitSongModal.tsx # Song submission wizard
 │   ├── LocationPicker.tsx  # Map-based location selector
+│   ├── AuthModal.tsx      # Login/signup with social buttons
 │   └── ...
 ├── contexts/         # React contexts
-│   ├── AuthContext.tsx
+│   ├── AuthContext.tsx     # Supabase auth + profiles
 │   └── SpotifyPlayerContext.tsx
 ├── lib/              # API & utility functions
 │   ├── songs.ts      # Song CRUD operations
@@ -28,6 +30,15 @@ src/
 ├── types/            # TypeScript types
 └── scripts/          # Database maintenance scripts
 ```
+
+## Authentication
+- **Provider**: Supabase Auth
+- **Methods**: Email/password, Google OAuth, Discord OAuth, Facebook OAuth
+- **Database tables**:
+  - `profiles` - User metadata (display_name, avatar_url, is_admin)
+  - `songs.user_id` - Links songs to users
+- **RLS Policies**: Users can read all songs, edit/delete their own; admins can manage all
+- **Setup**: See `AUTH_SETUP_GUIDE.md` and run `supabase-auth-migration.sql`
 
 ## Environment Variables
 See `.env.example` for required variables:
@@ -38,7 +49,7 @@ See `.env.example` for required variables:
 - `VITE_SPOTIFY_CLIENT_SECRET`
 
 ## Development Commands
-- `npm run dev` - Start dev server (http://localhost:5173)
+- `npm run dev` - Start dev server (http://localhost:5174)
 - `npm run build` - Production build
 - `npm run lint` - Run ESLint
 

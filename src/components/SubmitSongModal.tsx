@@ -67,7 +67,7 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
   const [searchResults, setSearchResults] = useState<SpotifyTrack[]>([]);
   const [showResults, setShowResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {

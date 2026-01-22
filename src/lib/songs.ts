@@ -51,7 +51,7 @@ function songToDb(song: Partial<SongLocation> & { id?: string }) {
 // Check if Supabase is configured
 function isSupabaseConfigured(): boolean {
   const url = import.meta.env.VITE_SUPABASE_URL;
-  return url && !url.includes('your-project');
+  return Boolean(url && !url.includes('your-project'));
 }
 
 // Fetch all songs

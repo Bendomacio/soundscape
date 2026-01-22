@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { X, Mail, Lock, LogIn, UserPlus, AlertCircle, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { Provider } from '@supabase/supabase-js';
@@ -9,7 +9,7 @@ interface AuthModalProps {
 }
 
 // Social provider config
-const socialProviders: { id: Provider; name: string; icon: JSX.Element; color: string; bgColor: string }[] = [
+const socialProviders: { id: Provider; name: string; icon: ReactNode; color: string; bgColor: string }[] = [
   {
     id: 'google',
     name: 'Google',
