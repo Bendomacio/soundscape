@@ -1,76 +1,135 @@
-# Active Context
+# Active Context - SoundScape Project
 
-## Current Branch
-`main`
-
-## Recent Merges
-- **2026-01-22**: Major feature day - 13 commits pushed to main
-  - Song panel redesign with comments & photos
-  - Song review system with My Submissions
-  - Discovery Panel with global exploration
-  - Full Spotify Web Playback SDK integration
-
-## What's Now in Main
-1. ✅ Auto-populate song info from Spotify URL
-2. ✅ Interactive map picker for location selection
-3. ✅ Improved location picker UX - larger map, "Use my location" button
-4. ✅ Location search - search by address/place name using Mapbox Geocoding
-5. ✅ Spotify search - search songs by name instead of requiring URL
-6. ✅ **Real Supabase authentication** - email/password + OAuth (Google, Discord, Facebook)
-7. ✅ User profiles with avatar and display name
-8. ✅ Songs linked to users (`user_id` foreign key)
-9. ✅ Row Level Security (RLS) for songs - users can edit/delete their own, admins can manage all
-10. ✅ **Song Detail Panel Redesign** - hero album art, dynamic gradient backgrounds, improved action bar
-11. ✅ **Comments System** - users can leave comments on song locations
-12. ✅ **Location Photos** - users can upload photos with admin approval workflow
-13. ✅ **Song Review System** - admin can review/edit/remove user submissions
-14. ✅ **My Submissions** - users can view their songs and respond to edit requests
-15. ✅ **Proper Upvote System** - Reddit-style likes with deduplication (one like per user)
-16. ✅ **Discovery Panel** - Near Me vs Map Center modes for global exploration
-17. ✅ **Radius Circle Visualization** - subtle transparent circle showing discovery area
-18. ✅ **Full Spotify Playback** - Web Playback SDK for Premium users (full songs, not previews)
+**Last Updated**: 2026-01-22
 
 ## Current State
-- All features merged to `main` and pushed
-- Real auth working with Google OAuth configured
-- Discord and Facebook OAuth not yet configured (user opted to skip for now)
-- Using mock Spotify search results since real API not configured
-- Comments, photos, likes, and review workflow all functional
-- **Spotify OAuth configured** - users can connect Spotify for full playback
-- Deployed to Vercel at `https://soundscape-self.vercel.app/`
 
-## Database Migrations
-- `supabase-auth-migration.sql` - Auth tables and RLS policies
-- `supabase-comments-photos-migration.sql` - Comments and photos tables with RLS
-- `supabase-songs-review-migration.sql` - Song review, likes, and upvote system
+The SoundScape app is fully functional and deployed on Vercel at https://soundscape-self.vercel.app/
+
+### Recent Completions (2026-01-22)
+1. **Mobile Optimization** - Comprehensive responsive design
+2. **Mobile Modal Scrolling** - Fixed song detail panel scrolling on mobile
+3. **Loading Screen Redesign** - Modern centered design with logo
+4. **UI Test Enforcement Rule** - Created `.cursor/rules/ui-tests.mdc`
+
+## Key Features Implemented
+
+### Core Functionality
+- ✅ Interactive Mapbox map with song markers
+- ✅ Spotify Web Playback SDK (full songs for Premium users)
+- ✅ Location-based song discovery with radius filtering
+- ✅ Discovery Panel (Near Me vs Explore modes)
+- ✅ Song submission with Spotify integration
+- ✅ User authentication (email/password + OAuth: Google, Discord, Facebook)
+- ✅ Admin panel for song management
+- ✅ Comments system on songs
+- ✅ Location photos (with admin approval)
+- ✅ Upvote/like system (one per user)
+- ✅ My Submissions page
+- ✅ Song review system (live/needs_edit/removed)
+
+### Mobile & UI
+- ✅ Fully responsive design (mobile.css)
+- ✅ Touch-friendly 44x44px minimum touch targets
+- ✅ Safe area insets for notched devices
+- ✅ Scrollable modals on mobile
+- ✅ Icon-only buttons on small screens
+- ✅ Modern loading screen with logo
+
+## Database Schema
+
+### Tables
+1. **songs** - Main song data with location, Spotify links, status
+2. **profiles** - User profiles (linked to auth.users)
+3. **song_comments** - Comments on songs
+4. **song_photos** - User-uploaded location photos
+5. **song_likes** - Upvote tracking (one per user per song)
+
+### SQL Functions
+- `get_song_like_count(song_id)` - Get total likes
+- `has_user_liked_song(song_id, user_id)` - Check if user liked
+- `increment_upvotes(song_id)` - +1 upvote
+- `decrement_upvotes(song_id)` - -1 upvote
+
+### Storage
+- **song-photos** bucket (public) - User-uploaded location photos
 
 ## Environment Variables Required
+
 ```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-VITE_MAPBOX_TOKEN=your_mapbox_public_token
-VITE_SPOTIFY_CLIENT_ID=your_spotify_client_id  # Required for full playback
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_anon_key
+VITE_MAPBOX_TOKEN=your_mapbox_token
+VITE_SPOTIFY_CLIENT_ID=your_spotify_client_id (REQUIRED)
+VITE_SPOTIFY_CLIENT_SECRET=your_client_secret (optional)
 ```
 
 ## Key Files
-- `src/components/SongDetailPanel.tsx` - Redesigned panel with comments/photos tabs, upvote button
-- `src/components/AdminPanel.tsx` - Photo approval workflow + Song review tab
-- `src/components/MySubmissions.tsx` - User's song list with edit request handling
-- `src/components/DiscoveryPanel.tsx` - Enhanced discovery with Near Me / Map Center modes
-- `src/components/MusicMap.tsx` - Shows radius circle and filters markers by mode
-- `src/lib/comments.ts` - API functions for comments and photos
-- `src/lib/songs.ts` - Extended with like/review/user submission functions
-- `src/contexts/SpotifyPlayerContext.tsx` - Web Playback SDK for Premium users
-- `src/contexts/AuthContext.tsx` - Robust auth with timeout protection
 
-## Recent Fixes
-- **Auth Loop Fix**: Prevented infinite loading on login with `isInitialized` ref, hard timeout, and `INITIAL_SESSION` filtering
-- **TypeScript Build Errors**: Fixed all production build issues (type imports, optional fields, refs)
-- **Comments/Photos PostgREST Errors**: Refactored to use separate queries instead of joins
-- **Storage RLS**: Added explicit policies for `song-photos` bucket
+### Components
+- `App.tsx` - Main app with routing and state
+- `MusicMap.tsx` - Mapbox map with markers and radius circle
+- `MusicPlayer.tsx` - Spotify player with progress bar (Premium)
+- `SongDetailPanel.tsx` - Modal with tabs (Info/Comments/Photos) - **scrollable on mobile**
+- `DiscoveryPanel.tsx` - Radius and location search controls
+- `Header.tsx` - Nav with responsive buttons (icon-only on mobile)
+- `AdminPanel.tsx` - Song review and photo approval
+- `MySubmissions.tsx` - User's submitted songs
 
-## Notes
-- GPG signing is configured but may timeout in agent terminal - use `--no-gpg-sign` if needed
-- Dev server runs on port 5174 (user configured OAuth redirects for this port)
-- **REVIEW LATER**: Spotify App API signup is currently closed - check back to enable real song search
-- **Spotify Premium Required**: Full playback (Web Playback SDK) only works for Premium users; Free users get 30s preview embed
+### Contexts
+- `AuthContext.tsx` - Auth state with robust timeout handling
+- `SpotifyPlayerContext.tsx` - Spotify playback and connection state
+
+### Styles
+- `src/styles/design-system.css` - Design tokens and component styles
+- `src/styles/mobile.css` - **Mobile-specific responsive styles**
+- `src/index.css` - Global styles and animations
+
+### Rules
+- `.cursor/rules/ui-tests.mdc` - **Always check UI tests before committing**
+
+## Database Migrations (Run in Order)
+
+1. `supabase-auth-migration.sql` - Auth, profiles, RLS
+2. `supabase-comments-photos-migration.sql` - Comments, photos, storage policies
+3. `supabase-songs-review-migration.sql` - Song status, likes, review system
+
+## Known Issues & Fixes
+
+### Auth Loop (FIXED)
+- Issue: Login would hang or loop on refresh
+- Fix: Robust timeout handling in `AuthContext.tsx` with refs and Promise.race
+
+### Mobile Scrolling (FIXED)
+- Issue: Song detail content clipped on mobile
+- Fix: Flexbox layout with `overflow-y: auto` on content section
+
+### UI Test Failures (FIXED)
+- Issue: Buttons had insufficient padding (< 8px)
+- Fix: Explicit inline styles with proper padding values
+
+## Tech Stack
+
+- React 19 + TypeScript
+- Vite 5 (build tool)
+- Supabase (database, auth, storage)
+- Mapbox GL JS + Geocoding API
+- Spotify Web API + Web Playback SDK
+- Lucide React (icons)
+- Deployed on Vercel (free tier)
+
+## Development Commands
+
+```bash
+npm run dev       # Start dev server (port 5173)
+npm run build     # Build for production
+npm run preview   # Preview production build
+```
+
+## Important Notes
+
+1. **Always run UI tests** before committing (check browser console)
+2. **Spotify Premium required** for full playback (Free users get 30s previews)
+3. **Mobile-first** - Test on mobile devices regularly
+4. **Git branching** - Use feature branches, merge to main when complete
+5. **Vercel redeploys** automatically on push to main
