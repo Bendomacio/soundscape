@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Music2 } from 'lucide-react';
 import './utils/uiTests'; // Auto-runs UI tests in dev mode
 import { MusicMap } from './components/MusicMap';
 import { MusicPlayer } from './components/MusicPlayer';
@@ -390,10 +391,53 @@ function AppContent() {
   // Loading state
   if (isLoading) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-[#0D1117]">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-[var(--color-text-muted)]">Loading SoundScape...</p>
+      <div style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0D1117'
+      }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '24px'
+        }}>
+          {/* Logo */}
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '16px',
+            background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(16, 185, 129, 0.3)'
+          }}>
+            <Music2 size={32} color="white" />
+          </div>
+          
+          {/* Spinner */}
+          <div style={{
+            width: '48px',
+            height: '48px',
+            border: '3px solid rgba(16, 185, 129, 0.2)',
+            borderTopColor: 'var(--color-primary)',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite'
+          }} />
+          
+          {/* Text */}
+          <p style={{
+            margin: 0,
+            color: 'var(--color-text-muted)',
+            fontSize: '15px',
+            letterSpacing: '0.5px'
+          }}>
+            Loading SoundScape
+          </p>
         </div>
       </div>
     );
