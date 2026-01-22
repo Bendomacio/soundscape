@@ -204,6 +204,8 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 | Radius Visualization | Subtle circle overlay showing discovery area | ✅ Done |
 | Full Spotify Playback | Web Playback SDK with OAuth (Premium users only) | ✅ Done |
 | Mobile Optimization | Responsive design with touch targets, media queries, safe areas | ✅ Done |
+| Mobile Modal Scrolling | Fixed scrolling in song detail panels on mobile | ✅ Done |
+| Loading Screen | Redesigned with logo, better centering, and smooth animations | ✅ Done |
 
 ### Planned
 
