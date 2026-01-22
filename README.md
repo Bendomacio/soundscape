@@ -112,6 +112,8 @@ src/
 
 - **songs** - Song entries with location data, Spotify metadata, and user ownership
 - **profiles** - User profiles with display name, avatar, and admin status
+- **song_comments** - User comments on songs
+- **song_photos** - User-uploaded photos with admin approval workflow
 
 ### Row Level Security
 
@@ -157,7 +159,10 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 | Real Authentication | Email/password + OAuth (Google, Discord, Facebook) | Done |
 | User Profiles | Auto-created profiles with avatar and display name | Done |
 | Song Ownership | Songs linked to users with RLS policies | Done |
-| Admin Panel | Manage songs, verify submissions | Done |
+| Admin Panel | Manage songs, verify submissions, approve photos | Done |
+| Song Detail Panel | Redesigned with hero album art, dynamic gradients, action bar | Done |
+| Comments | Leave comments on song locations | Done |
+| Location Photos | Upload photos with admin approval workflow | Done |
 
 ### Planned
 
@@ -173,7 +178,7 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 | Feature | Description | Notes |
 |---------|-------------|-------|
 | Favorites | Bookmark songs to a personal collection | Would need new table |
-| Comments | Leave comments on song locations | Social engagement |
+| Song Stories | Add personal stories/memories to songs | Rich content beyond comments |
 | Song Verification | Admin workflow to verify/approve submissions | Quality control |
 | Search & Filters | Filter songs by artist, title, genre | Better discovery |
 | Nearby Notifications | Alert when near a song location | Requires geofencing/PWA |
