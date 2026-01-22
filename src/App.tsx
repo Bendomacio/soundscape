@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import './utils/uiTests'; // Auto-runs UI tests in dev mode
 import { MusicMap } from './components/MusicMap';
 import { MusicPlayer } from './components/MusicPlayer';
-import { RadiusSlider } from './components/RadiusSlider';
+import { DiscoveryPanel } from './components/DiscoveryPanel';
 import { SongDetailPanel } from './components/SongDetailPanel';
 import { SubmitSongModal } from './components/SubmitSongModal';
 import { Header } from './components/Header';
@@ -32,12 +32,16 @@ function AppContent() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showMySubmissions, setShowMySubmissions] = useState(false);
   const [radius, setRadius] = useState(5);
+  const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore'>('nearby');
   
   // User location (default to central London)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>({
     latitude: 51.5074,
     longitude: -0.1278
   });
+
+  // Exploration center (for "explore map" mode)
+  const [exploreCenter, setExploreCenter] = useState<{ latitude: number; longitude: number; name?: string } | null>(null);
 
   // Map view state - centered on central London
   const [viewState, setViewState] = useState<MapViewState>({
@@ -168,15 +172,32 @@ function AppContent() {
     }
   }, []);
 
-  // Calculate songs in radius
+  // Calculate songs in radius based on discovery mode
   const songsInRadius = songs.filter(song => {
-    if (!userLocation) return true;
-    const distance = getDistanceKm(
-      userLocation.latitude,
-      userLocation.longitude,
-      song.latitude,
-      song.longitude
-    );
+    // If radius is 0, show all songs (no filtering)
+    if (radius === 0) return true;
+    
+    // Determine center point based on mode
+    let centerLat: number;
+    let centerLng: number;
+    
+    if (discoveryMode === 'nearby') {
+      if (!userLocation) return true;
+      centerLat = userLocation.latitude;
+      centerLng = userLocation.longitude;
+    } else {
+      // Explore mode - use explore center or map center
+      if (exploreCenter) {
+        centerLat = exploreCenter.latitude;
+        centerLng = exploreCenter.longitude;
+      } else {
+        // Fall back to current map view center
+        centerLat = viewState.latitude;
+        centerLng = viewState.longitude;
+      }
+    }
+    
+    const distance = getDistanceKm(centerLat, centerLng, song.latitude, song.longitude);
     return distance <= radius;
   });
 
@@ -306,13 +327,47 @@ function AppContent() {
         onViewStateChange={setViewState}
       />
 
-      {/* Radius Slider */}
-      <RadiusSlider
-        value={radius}
-        min={1}
-        max={20}
-        onChange={setRadius}
+      {/* Discovery Panel */}
+      <DiscoveryPanel
+        radius={radius}
+        onRadiusChange={setRadius}
         songCount={songsInRadius.length}
+        totalSongCount={songs.length}
+        mode={discoveryMode}
+        onModeChange={setDiscoveryMode}
+        onLocationSearch={(lat, lng, name) => {
+          setExploreCenter({ latitude: lat, longitude: lng, name });
+          setDiscoveryMode('explore');
+          setViewState(prev => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+            zoom: 13
+          }));
+        }}
+        onUseMyLocation={() => {
+          if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const newLocation = {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude
+                };
+                setUserLocation(newLocation);
+                setDiscoveryMode('nearby');
+                setViewState(prev => ({
+                  ...prev,
+                  latitude: newLocation.latitude,
+                  longitude: newLocation.longitude
+                }));
+              },
+              (error) => {
+                console.log('Geolocation error:', error.message);
+                alert('Could not get your location. Please check permissions.');
+              }
+            );
+          }
+        }}
       />
 
       {/* Music Player */}

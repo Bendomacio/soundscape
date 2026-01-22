@@ -1,0 +1,494 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  Target, 
+  MapPin, 
+  Globe, 
+  Search, 
+  X, 
+  ChevronDown, 
+  ChevronUp,
+  Navigation,
+  Compass,
+  Loader2
+} from 'lucide-react';
+
+interface DiscoveryPanelProps {
+  radius: number;
+  onRadiusChange: (value: number) => void;
+  songCount: number;
+  totalSongCount: number;
+  mode: 'nearby' | 'explore';
+  onModeChange: (mode: 'nearby' | 'explore') => void;
+  onLocationSearch: (lat: number, lng: number, name: string) => void;
+  onUseMyLocation: () => void;
+}
+
+interface SearchResult {
+  id: string;
+  place_name: string;
+  center: [number, number];
+}
+
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
+
+const RADIUS_PRESETS = [
+  { value: 1, label: '1km', description: 'Walking' },
+  { value: 5, label: '5km', description: 'Neighbourhood' },
+  { value: 10, label: '10km', description: 'District' },
+  { value: 0, label: 'All', description: 'Global' }
+];
+
+export function DiscoveryPanel({ 
+  radius, 
+  onRadiusChange, 
+  songCount, 
+  totalSongCount,
+  mode,
+  onModeChange,
+  onLocationSearch,
+  onUseMyLocation
+}: DiscoveryPanelProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowResults(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Debounced search
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    if (!query.trim()) {
+      setSearchResults([]);
+      setShowResults(false);
+      return;
+    }
+    
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const response = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&limit=5&types=place,locality,neighborhood,address,poi`
+        );
+        const data = await response.json();
+        setSearchResults(data.features || []);
+        setShowResults(true);
+      } catch (err) {
+        console.error('Search error:', err);
+      }
+      setIsSearching(false);
+    }, 300);
+  }, []);
+
+  const handleSelectLocation = (result: SearchResult) => {
+    const [lng, lat] = result.center;
+    onLocationSearch(lat, lng, result.place_name.split(',')[0]);
+    setSearchQuery('');
+    setShowResults(false);
+    setSearchResults([]);
+  };
+
+  const isShowingAll = radius === 0;
+  const displayRadius = isShowingAll ? 'All' : `${radius}km`;
+  const percentage = isShowingAll ? 100 : Math.min((radius / 20) * 100, 100);
+
+  return (
+    <div 
+      style={{
+        position: 'absolute',
+        top: '80px',
+        left: '16px',
+        width: isExpanded ? '320px' : '280px',
+        background: 'var(--color-dark-card)',
+        borderRadius: '16px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        border: '1px solid var(--color-dark-lighter)',
+        zIndex: 20,
+        transition: 'width 200ms ease',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Header - Always visible */}
+      <div 
+        style={{ 
+          padding: '16px',
+          cursor: 'pointer'
+        }}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: mode === 'nearby' 
+                ? 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))'
+                : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {mode === 'nearby' ? <Target size={18} color="white" /> : <Globe size={18} color="white" />}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0, whiteSpace: 'nowrap' }}>
+                {mode === 'nearby' ? 'Near Me' : 'Exploring'}
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', margin: 0, whiteSpace: 'nowrap' }}>
+                {isShowingAll 
+                  ? `${totalSongCount} songs total`
+                  : `${songCount} ${songCount === 1 ? 'song' : 'songs'} in range`
+                }
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <span style={{ 
+                fontSize: '20px', 
+                fontWeight: 700, 
+                color: mode === 'nearby' ? 'var(--color-primary)' : '#8b5cf6' 
+              }}>
+                {displayRadius}
+              </span>
+            </div>
+            {isExpanded ? <ChevronUp size={18} color="var(--color-text-muted)" /> : <ChevronDown size={18} color="var(--color-text-muted)" />}
+          </div>
+        </div>
+
+        {/* Quick Radius Presets - Compact */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '6px', 
+          marginTop: '12px'
+        }}>
+          {RADIUS_PRESETS.map(preset => (
+            <button
+              key={preset.value}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRadiusChange(preset.value);
+              }}
+              style={{
+                flex: 1,
+                padding: '6px 4px',
+                background: radius === preset.value 
+                  ? (mode === 'nearby' ? 'var(--color-primary)' : '#8b5cf6')
+                  : 'var(--color-dark-lighter)',
+                border: 'none',
+                borderRadius: '8px',
+                color: radius === preset.value ? 'white' : 'var(--color-text-muted)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 150ms ease'
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <div style={{ 
+          borderTop: '1px solid var(--color-dark-lighter)',
+          padding: '16px',
+          animation: 'slideDown 200ms ease'
+        }}>
+          {/* Mode Toggle */}
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Discovery Mode
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => onModeChange('nearby')}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '10px',
+                  background: mode === 'nearby' ? 'rgba(16, 185, 129, 0.15)' : 'var(--color-dark-lighter)',
+                  border: mode === 'nearby' ? '1px solid var(--color-primary)' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: mode === 'nearby' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease'
+                }}
+              >
+                <Navigation size={14} />
+                Near Me
+              </button>
+              <button
+                onClick={() => onModeChange('explore')}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '10px',
+                  background: mode === 'explore' ? 'rgba(139, 92, 246, 0.15)' : 'var(--color-dark-lighter)',
+                  border: mode === 'explore' ? '1px solid #8b5cf6' : '1px solid transparent',
+                  borderRadius: '10px',
+                  color: mode === 'explore' ? '#8b5cf6' : 'var(--color-text-muted)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 150ms ease'
+                }}
+              >
+                <Compass size={14} />
+                Map Center
+              </button>
+            </div>
+          </div>
+
+          {/* Custom Radius Slider */}
+          {!isShowingAll && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Custom Radius
+                </p>
+                <span style={{ fontSize: '12px', color: 'var(--color-text)', fontWeight: 500 }}>{radius}km</span>
+              </div>
+              <div style={{ position: 'relative', height: '20px' }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: 0,
+                  right: 0,
+                  height: '6px',
+                  transform: 'translateY(-50%)',
+                  background: 'var(--color-dark-lighter)',
+                  borderRadius: '3px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${percentage}%`,
+                    background: mode === 'nearby' 
+                      ? 'linear-gradient(90deg, var(--color-primary), var(--color-accent))'
+                      : 'linear-gradient(90deg, #8b5cf6, #ec4899)',
+                    borderRadius: '3px',
+                    transition: 'width 150ms ease'
+                  }} />
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={20}
+                  value={radius || 20}
+                  onChange={(e) => onRadiusChange(parseInt(e.target.value))}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    opacity: 0,
+                    cursor: 'pointer',
+                    margin: 0
+                  }}
+                />
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: `${percentage}%`,
+                  width: '16px',
+                  height: '16px',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'white',
+                  borderRadius: '50%',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  border: `3px solid ${mode === 'nearby' ? 'var(--color-primary)' : '#8b5cf6'}`,
+                  pointerEvents: 'none',
+                  transition: 'left 150ms ease'
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* Location Search */}
+          <div ref={searchRef} style={{ position: 'relative' }}>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Jump to Location
+            </p>
+            <div style={{ position: 'relative' }}>
+              <Search 
+                size={16} 
+                style={{
+                  position: 'absolute',
+                  left: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--color-text-muted)'
+                }}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Search any place..."
+                style={{
+                  width: '100%',
+                  height: '40px',
+                  paddingLeft: '38px',
+                  paddingRight: searchQuery ? '38px' : '12px',
+                  fontSize: '13px',
+                  background: 'var(--color-dark-lighter)',
+                  border: '1px solid transparent',
+                  borderRadius: '10px',
+                  color: 'var(--color-text)',
+                  outline: 'none'
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    padding: '4px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--color-text-muted)'
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+              {isSearching && (
+                <Loader2 
+                  size={16} 
+                  className="animate-spin"
+                  style={{
+                    position: 'absolute',
+                    right: searchQuery ? '32px' : '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--color-text-muted)'
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Search Results Dropdown */}
+            {showResults && searchResults.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                left: 0,
+                right: 0,
+                background: 'var(--color-dark-card)',
+                border: '1px solid var(--color-dark-lighter)',
+                borderRadius: '10px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                zIndex: 100,
+                maxHeight: '200px',
+                overflowY: 'auto'
+              }}>
+                {searchResults.map(result => (
+                  <button
+                    key={result.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectLocation(result);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid var(--color-dark-lighter)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      color: 'var(--color-text)'
+                    }}
+                  >
+                    <MapPin size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                    <span style={{ 
+                      fontSize: '13px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {result.place_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Use My Location Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUseMyLocation();
+              onModeChange('nearby');
+            }}
+            style={{
+              width: '100%',
+              marginTop: '12px',
+              padding: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              background: 'var(--color-dark-lighter)',
+              border: 'none',
+              borderRadius: '10px',
+              color: 'var(--color-text-muted)',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 150ms ease'
+            }}
+          >
+            <Navigation size={14} />
+            Use My Location
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
