@@ -111,11 +111,14 @@ export function DiscoveryPanel({
 
   return (
     <div 
+      className="discovery-panel"
       style={{
         position: 'absolute',
         top: '80px',
         left: '16px',
+        right: 'auto',
         width: isExpanded ? '320px' : '280px',
+        maxWidth: 'calc(100vw - 32px)',
         background: 'var(--color-dark-card)',
         borderRadius: '16px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',

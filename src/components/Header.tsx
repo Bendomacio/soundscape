@@ -47,46 +47,21 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
           {isAdmin && (
             <button
               onClick={onAdminClick}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '10px 14px',
-                background: 'var(--color-dark-card)',
-                color: 'var(--color-primary)',
-                fontWeight: 500,
-                fontSize: '14px',
-                borderRadius: '9999px',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap'
-              }}
+              className="flex items-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2.5 bg-[var(--color-dark-card)] text-[var(--color-primary)] font-medium text-sm rounded-full border border-[rgba(16,185,129,0.3)] cursor-pointer transition-all hover:bg-[var(--color-dark-lighter)]"
+              title="Admin Panel"
             >
               <Shield size={16} />
-              <span>Admin</span>
+              <span className="hidden sm:inline">Admin</span>
             </button>
           )}
 
           <button
             onClick={onSubmitClick}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 16px',
-              background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-secondary))',
-              color: 'var(--color-dark)',
-              fontWeight: 600,
-              fontSize: '14px',
-              borderRadius: '9999px',
-              border: 'none',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-            }}
+            className="flex items-center gap-1.5 px-3 py-2.5 sm:px-4 sm:py-2.5 bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-secondary)] text-[var(--color-dark)] font-semibold text-sm rounded-full border-none cursor-pointer shadow-md transition-all hover:opacity-90"
+            title="Submit Song"
           >
-            <Plus size={16} />
-            <span>Submit Song</span>
+            <Plus size={18} className="sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Submit Song</span>
           </button>
           
           {/* User button / menu */}
@@ -118,10 +93,10 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
 
             {/* User dropdown menu */}
             {showUserMenu && user && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-[var(--color-dark-card)] border border-[var(--color-dark-lighter)] rounded-xl shadow-xl overflow-hidden">
-                <div className="p-4 border-b border-[var(--color-dark-lighter)]">
-                  <p className="font-medium truncate">{profile?.display_name || user.email}</p>
-                  <p className="text-xs text-[var(--color-text-muted)] truncate">
+              <div className="absolute right-0 top-full mt-2 w-64 sm:w-56 max-h-[80vh] overflow-y-auto bg-[var(--color-dark-card)] border border-[var(--color-dark-lighter)] rounded-xl shadow-xl overflow-hidden">
+                <div className="p-3 sm:p-4 border-b border-[var(--color-dark-lighter)]">
+                  <p className="font-medium truncate text-sm sm:text-base">{profile?.display_name || user.email}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] truncate mt-0.5">
                     {isAdmin ? 'Administrator' : user.email}
                   </p>
                 </div>

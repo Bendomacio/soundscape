@@ -1,0 +1,292 @@
+/* ========================================
+   MOBILE OPTIMIZATION
+   ======================================== */
+
+/* Mobile breakpoints */
+:root {
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+}
+
+/* ---- MOBILE TYPOGRAPHY ---- */
+@media (max-width: 640px) {
+  :root {
+    --text-xs: 10px;
+    --text-sm: 12px;
+    --text-base: 14px;
+    --text-lg: 16px;
+    --text-xl: 18px;
+    --text-2xl: 22px;
+    --text-3xl: 28px;
+  }
+  
+  body {
+    font-size: 14px;
+  }
+}
+
+/* ---- MOBILE SPACING ---- */
+@media (max-width: 640px) {
+  :root {
+    --space-xs: 3px;
+    --space-sm: 6px;
+    --space-md: 10px;
+    --space-lg: 12px;
+    --space-xl: 16px;
+    --space-2xl: 24px;
+    --space-3xl: 32px;
+  }
+}
+
+/* ---- MOBILE COMPONENT SIZES ---- */
+@media (max-width: 640px) {
+  :root {
+    --input-height: 48px; /* Larger for better touch targets */
+    --button-height: 48px;
+    --icon-md: 18px;
+    --icon-lg: 22px;
+  }
+}
+
+/* ---- MOBILE MODALS ---- */
+@media (max-width: 640px) {
+  .modal {
+    padding: 0;
+    align-items: flex-end;
+  }
+  
+  .modal-content {
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    overflow-y: auto;
+  }
+  
+  .modal-header {
+    position: sticky;
+    top: 0;
+    background: var(--color-dark-card);
+    z-index: 10;
+    padding: var(--space-lg);
+  }
+  
+  .modal-title {
+    font-size: var(--text-lg);
+  }
+  
+  .modal-body {
+    padding: var(--space-lg);
+  }
+  
+  .modal-footer {
+    padding: var(--space-lg);
+    padding-top: 0;
+  }
+}
+
+/* ---- MOBILE BUTTONS ---- */
+@media (max-width: 640px) {
+  .btn {
+    height: 48px;
+    padding: 0 var(--space-lg);
+    font-size: var(--text-base);
+    min-height: 44px; /* iOS touch target minimum */
+  }
+  
+  .btn-sm {
+    height: 44px;
+    padding: 0 var(--space-md);
+    font-size: var(--text-sm);
+  }
+  
+  .btn-icon {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ---- MOBILE INPUTS ---- */
+@media (max-width: 640px) {
+  .input {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+    padding: 0 var(--space-md);
+  }
+  
+  .input-with-icon {
+    padding-left: 44px;
+  }
+}
+
+/* ---- TOUCH OPTIMIZATIONS ---- */
+@media (max-width: 640px) {
+  /* Larger touch targets */
+  button,
+  [role="button"],
+  .clickable {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Remove hover effects on touch devices */
+  @media (hover: none) {
+    .btn:hover {
+      transform: none;
+    }
+    
+    .link:hover {
+      text-decoration: none;
+    }
+  }
+  
+  /* Active states for touch feedback */
+  button:active,
+  [role="button"]:active {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+
+/* ---- MOBILE SCROLLING ---- */
+@media (max-width: 640px) {
+  /* Smooth scrolling for modals */
+  .modal-content {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Hide scrollbar on mobile for cleaner look */
+  .modal-content::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .modal-content {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* ---- SAFE AREA INSETS (for notched devices) ---- */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .mobile-safe-bottom {
+    padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom));
+  }
+  
+  .mobile-safe-top {
+    padding-top: calc(var(--space-lg) + env(safe-area-inset-top));
+  }
+}
+
+/* ---- MOBILE HEADER ---- */
+@media (max-width: 640px) {
+  /* Compact header for mobile */
+  header {
+    padding: var(--space-sm) var(--space-md) !important;
+  }
+  
+  /* Hide long text labels on small screens */
+  .mobile-hide-text {
+    font-size: 0;
+  }
+  
+  .mobile-hide {
+    display: none !important;
+  }
+}
+
+/* ---- MOBILE MAP CONTROLS ---- */
+@media (max-width: 640px) {
+  .mapboxgl-ctrl-group {
+    margin: 8px !important;
+  }
+  
+  .mapboxgl-ctrl-group button {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  
+  /* Move map controls to better mobile positions */
+  .mapboxgl-ctrl-top-right {
+    top: 60px; /* Below header */
+  }
+  
+  .mapboxgl-ctrl-bottom-right {
+    bottom: 160px; /* Above player */
+  }
+}
+
+/* ---- MOBILE PLAYER ---- */
+@media (max-width: 640px) {
+  /* Ensure player is accessible above mobile keyboard */
+  .music-player-container {
+    padding: 10px 12px !important;
+    gap: 10px !important;
+  }
+  
+  /* Smaller album art on mobile */
+  .music-player-container img {
+    width: 48px !important;
+    height: 48px !important;
+  }
+  
+  /* Hide shuffle button on very small screens */
+  @media (max-width: 380px) {
+    .music-player-shuffle {
+      display: none !important;
+    }
+  }
+}
+
+/* ---- MOBILE DISCOVERY PANEL ---- */
+@media (max-width: 640px) {
+  .discovery-panel {
+    top: 60px !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+  
+  /* Smaller text in discovery panel */
+  .discovery-panel h3 {
+    font-size: 13px !important;
+  }
+  
+  .discovery-panel p {
+    font-size: 11px !important;
+  }
+  
+  /* Compact buttons */
+  .discovery-panel button {
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+    min-height: 36px !important;
+  }
+}
+
+/* ---- LANDSCAPE ORIENTATION ---- */
+@media (max-width: 640px) and (orientation: landscape) {
+  /* Reduce header height in landscape */
+  header {
+    padding: var(--space-xs) var(--space-md) !important;
+  }
+  
+  /* Smaller modals in landscape */
+  .modal-content {
+    max-height: 80vh;
+  }
+  
+  /* Collapse discovery panel in landscape */
+  .discovery-panel {
+    top: 50px !important;
+  }
+}
+
+/* ---- ACCESSIBILITY ---- */
+@media (max-width: 640px) {
+  /* Increase focus outline for better visibility on mobile */
+  :focus-visible {
+    outline-width: 3px;
+  }
+}

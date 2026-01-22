@@ -121,13 +121,13 @@ export function MusicPlayer({
         </div>
       )}
       
-      <div style={{
+      <div className="music-player-container" style={{
         maxWidth: '896px',
         margin: '0 auto',
-        padding: '16px',
+        padding: '12px',
         display: 'flex',
         alignItems: 'center',
-        gap: '16px'
+        gap: '12px'
       }}>
         {/* Song info - clickable to open detail panel */}
         <button 
@@ -257,6 +257,7 @@ export function MusicPlayer({
 
         {/* Shuffle button */}
         <button
+          className="music-player-shuffle"
           onClick={onShuffle}
           aria-label="Shuffle"
           title="Play random song"
@@ -268,7 +269,12 @@ export function MusicPlayer({
             borderRadius: '50%',
             cursor: 'pointer',
             flexShrink: 0,
-            transition: 'color 0.2s'
+            transition: 'color 0.2s',
+            minWidth: '44px',
+            minHeight: '44px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
           onMouseEnter={e => e.currentTarget.style.color = 'var(--color-text)'}
           onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
