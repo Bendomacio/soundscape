@@ -1,0 +1,73 @@
+---
+description: Always run and respect UI tests before committing changes
+alwaysApply: true
+---
+
+# UI Test Requirements
+
+## Critical Rule: Always Check UI Tests
+
+Before making ANY commit, you MUST verify that all UI tests pass.
+
+### Running Tests
+
+The app has automated UI tests in `src/utils/uiTests.ts` that run automatically when the dev server loads. Check the browser console for test results.
+
+### Test Requirements
+
+**Buttons with text** must have:
+- Minimum 8px padding left/right
+- No text clipping (scrollWidth ≤ clientWidth)
+- Proper touch targets (44x44px minimum recommended)
+
+**Badges/Pills** (rounded-full elements with text) must have:
+- Minimum 10px padding left/right
+- No text overflow
+
+**Inputs** must have:
+- Minimum 40px height
+- Proper icon padding (if using input-wrapper pattern)
+
+**Modals** must:
+- Have pointer-events enabled on content
+- Have proper z-index layering
+- Not use backdrop-blur on modal backdrops
+
+### Before Committing
+
+1. ✅ Check browser console for UI test results
+2. ✅ Ensure all tests show green checkmarks
+3. ✅ Fix any failing tests before commit
+4. ✅ Never commit with failing UI tests
+
+### Common Issues
+
+**Issue**: Button padding too small
+**Fix**: Use inline styles with explicit padding values (min 8px for buttons, 10px for badges)
+
+```tsx
+// ❌ BAD - May not compute correctly
+<button className="px-2">Submit</button>
+
+// ✅ GOOD - Explicit padding
+<button style={{ padding: '10px 14px' }}>Submit</button>
+```
+
+**Issue**: Badge detected as button
+**Fix**: Ensure rounded-full elements with text have 10px+ padding
+
+### Testing After Changes
+
+After making UI changes:
+1. Load the app in browser
+2. Open developer console (F12)
+3. Look for "🧪 SOUNDSCAPE UI TESTS" output
+4. Verify all tests pass (green checkmarks)
+5. Fix any failures before committing
+
+### Remember
+
+- UI tests exist to catch layout issues early
+- They protect user experience across devices
+- Failing tests indicate real problems users will encounter
+- Always respect the tests - they're there for a reason

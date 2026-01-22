@@ -47,7 +47,22 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
           {isAdmin && (
             <button
               onClick={onAdminClick}
-              className="flex items-center gap-1.5 px-3 py-2.5 sm:px-3.5 sm:py-2.5 bg-[var(--color-dark-card)] text-[var(--color-primary)] font-medium text-sm rounded-full border border-[rgba(16,185,129,0.3)] cursor-pointer transition-all hover:bg-[var(--color-dark-lighter)]"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 14px',
+                background: 'var(--color-dark-card)',
+                color: 'var(--color-primary)',
+                fontWeight: 500,
+                fontSize: '14px',
+                borderRadius: '9999px',
+                border: '1px solid rgba(16, 185, 129, 0.3)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap'
+              }}
+              className="mobile-responsive-btn"
               title="Admin Panel"
             >
               <Shield size={16} />
@@ -57,10 +72,26 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
 
           <button
             onClick={onSubmitClick}
-            className="flex items-center gap-1.5 px-3 py-2.5 sm:px-4 sm:py-2.5 bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-secondary)] text-[var(--color-dark)] font-semibold text-sm rounded-full border-none cursor-pointer shadow-md transition-all hover:opacity-90"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 16px',
+              background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-secondary))',
+              color: 'var(--color-dark)',
+              fontWeight: 600,
+              fontSize: '14px',
+              borderRadius: '9999px',
+              border: 'none',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
+            }}
+            className="mobile-responsive-btn"
             title="Submit Song"
           >
-            <Plus size={18} className="sm:w-4 sm:h-4" />
+            <Plus size={18} />
             <span className="hidden sm:inline">Submit Song</span>
           </button>
           

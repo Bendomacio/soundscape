@@ -185,7 +185,17 @@
     padding: var(--space-sm) var(--space-md) !important;
   }
   
-  /* Hide long text labels on small screens */
+  /* Hide long text labels on small screens - icon-only buttons */
+  .mobile-responsive-btn {
+    padding: 10px !important;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  .mobile-responsive-btn span {
+    display: none !important;
+  }
+  
   .mobile-hide-text {
     font-size: 0;
   }
