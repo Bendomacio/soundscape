@@ -117,19 +117,25 @@ CREATE POLICY "Admins can delete any photo"
 -- 3. STORAGE BUCKET FOR PHOTOS
 -- ============================================
 
--- Create storage bucket for song photos (run this separately if needed)
--- INSERT INTO storage.buckets (id, name, public) VALUES ('song-photos', 'song-photos', true);
+-- First create the bucket in Supabase Dashboard > Storage > New Bucket
+-- Name: song-photos, Public: ON
 
--- Storage policies (run in Supabase Dashboard > Storage > Policies)
--- Or use these SQL commands:
+-- Then run these storage policies:
 
 -- Allow authenticated users to upload to song-photos bucket
--- CREATE POLICY "Authenticated users can upload photos"
---   ON storage.objects FOR INSERT
---   TO authenticated
---   WITH CHECK (bucket_id = 'song-photos');
+CREATE POLICY "Authenticated users can upload photos"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'song-photos');
 
 -- Allow public read access to song-photos
--- CREATE POLICY "Public read access for song photos"
---   ON storage.objects FOR SELECT
---   USING (bucket_id = 'song-photos');
+CREATE POLICY "Public read access for song photos"
+  ON storage.objects FOR SELECT
+  TO public
+  USING (bucket_id = 'song-photos');
+
+-- Allow users to delete their own photos
+CREATE POLICY "Users can delete own photos"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'song-photos' AND auth.uid()::text = (storage.foldername(name))[2]);

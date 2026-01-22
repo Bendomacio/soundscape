@@ -6,19 +6,10 @@ import type { SongComment, SongPhoto } from '../types';
 // ============================================
 
 export async function getComments(songId: string): Promise<SongComment[]> {
-  const { data, error } = await supabase
+  // Get comments
+  const { data: comments, error } = await supabase
     .from('song_comments')
-    .select(`
-      id,
-      song_id,
-      user_id,
-      content,
-      created_at,
-      profiles:user_id (
-        display_name,
-        avatar_url
-      )
-    `)
+    .select('id, song_id, user_id, content, created_at')
     .eq('song_id', songId)
     .order('created_at', { ascending: false });
 
@@ -27,15 +18,29 @@ export async function getComments(songId: string): Promise<SongComment[]> {
     return [];
   }
 
-  return (data || []).map(row => ({
-    id: row.id,
-    songId: row.song_id,
-    userId: row.user_id,
-    content: row.content,
-    createdAt: new Date(row.created_at),
-    userDisplayName: (row.profiles as any)?.display_name || 'Anonymous',
-    userAvatarUrl: (row.profiles as any)?.avatar_url
-  }));
+  if (!comments || comments.length === 0) return [];
+
+  // Get unique user IDs and fetch their profiles
+  const userIds = [...new Set(comments.map(c => c.user_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', userIds);
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+  return comments.map(row => {
+    const profile = profileMap.get(row.user_id);
+    return {
+      id: row.id,
+      songId: row.song_id,
+      userId: row.user_id,
+      content: row.content,
+      createdAt: new Date(row.created_at),
+      userDisplayName: profile?.display_name || 'Anonymous',
+      userAvatarUrl: profile?.avatar_url
+    };
+  });
 }
 
 export async function addComment(songId: string, userId: string, content: string): Promise<SongComment | null> {
@@ -46,17 +51,7 @@ export async function addComment(songId: string, userId: string, content: string
       user_id: userId,
       content: content.trim()
     })
-    .select(`
-      id,
-      song_id,
-      user_id,
-      content,
-      created_at,
-      profiles:user_id (
-        display_name,
-        avatar_url
-      )
-    `)
+    .select('id, song_id, user_id, content, created_at')
     .single();
 
   if (error) {
@@ -69,9 +64,8 @@ export async function addComment(songId: string, userId: string, content: string
     songId: data.song_id,
     userId: data.user_id,
     content: data.content,
-    createdAt: new Date(data.created_at),
-    userDisplayName: (data.profiles as any)?.display_name || 'Anonymous',
-    userAvatarUrl: (data.profiles as any)?.avatar_url
+    createdAt: new Date(data.created_at)
+    // Profile info will be added by the caller
   };
 }
 
@@ -95,19 +89,7 @@ export async function deleteComment(commentId: string): Promise<boolean> {
 export async function getPhotos(songId: string, includeUnapproved = false): Promise<SongPhoto[]> {
   let query = supabase
     .from('song_photos')
-    .select(`
-      id,
-      song_id,
-      user_id,
-      photo_url,
-      caption,
-      approved,
-      rejected,
-      created_at,
-      profiles:user_id (
-        display_name
-      )
-    `)
+    .select('id, song_id, user_id, photo_url, caption, approved, rejected, created_at')
     .eq('song_id', songId)
     .eq('rejected', false)
     .order('created_at', { ascending: false });
@@ -116,24 +98,38 @@ export async function getPhotos(songId: string, includeUnapproved = false): Prom
     query = query.eq('approved', true);
   }
 
-  const { data, error } = await query;
+  const { data: photos, error } = await query;
 
   if (error) {
     console.error('Error fetching photos:', error);
     return [];
   }
 
-  return (data || []).map(row => ({
-    id: row.id,
-    songId: row.song_id,
-    userId: row.user_id,
-    photoUrl: row.photo_url,
-    caption: row.caption,
-    approved: row.approved,
-    rejected: row.rejected,
-    createdAt: new Date(row.created_at),
-    userDisplayName: (row.profiles as any)?.display_name || 'Anonymous'
-  }));
+  if (!photos || photos.length === 0) return [];
+
+  // Get unique user IDs and fetch their profiles
+  const userIds = [...new Set(photos.map(p => p.user_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', userIds);
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+  return photos.map(row => {
+    const profile = profileMap.get(row.user_id);
+    return {
+      id: row.id,
+      songId: row.song_id,
+      userId: row.user_id,
+      photoUrl: row.photo_url,
+      caption: row.caption,
+      approved: row.approved,
+      rejected: row.rejected,
+      createdAt: new Date(row.created_at),
+      userDisplayName: profile?.display_name || 'Anonymous'
+    };
+  });
 }
 
 export async function uploadPhoto(
@@ -206,26 +202,9 @@ export async function deletePhoto(photoId: string): Promise<boolean> {
 
 // Admin functions
 export async function getPendingPhotos(): Promise<SongPhoto[]> {
-  const { data, error } = await supabase
+  const { data: photos, error } = await supabase
     .from('song_photos')
-    .select(`
-      id,
-      song_id,
-      user_id,
-      photo_url,
-      caption,
-      approved,
-      rejected,
-      created_at,
-      profiles:user_id (
-        display_name
-      ),
-      songs:song_id (
-        title,
-        artist,
-        location_name
-      )
-    `)
+    .select('id, song_id, user_id, photo_url, caption, approved, rejected, created_at')
     .eq('approved', false)
     .eq('rejected', false)
     .order('created_at', { ascending: true });
@@ -235,17 +214,31 @@ export async function getPendingPhotos(): Promise<SongPhoto[]> {
     return [];
   }
 
-  return (data || []).map(row => ({
-    id: row.id,
-    songId: row.song_id,
-    userId: row.user_id,
-    photoUrl: row.photo_url,
-    caption: row.caption,
-    approved: row.approved,
-    rejected: row.rejected,
-    createdAt: new Date(row.created_at),
-    userDisplayName: (row.profiles as any)?.display_name || 'Anonymous'
-  }));
+  if (!photos || photos.length === 0) return [];
+
+  // Get unique user IDs and fetch their profiles
+  const userIds = [...new Set(photos.map(p => p.user_id))];
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', userIds);
+
+  const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+  return photos.map(row => {
+    const profile = profileMap.get(row.user_id);
+    return {
+      id: row.id,
+      songId: row.song_id,
+      userId: row.user_id,
+      photoUrl: row.photo_url,
+      caption: row.caption,
+      approved: row.approved,
+      rejected: row.rejected,
+      createdAt: new Date(row.created_at),
+      userDisplayName: profile?.display_name || 'Anonymous'
+    };
+  });
 }
 
 export async function approvePhoto(photoId: string): Promise<boolean> {
