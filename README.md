@@ -10,6 +10,7 @@ A location-based music discovery app that connects songs to places. Explore a ma
 - **Song Submission** - Submit new songs with location search and Spotify integration
 - **User Authentication** - Sign in with email/password or OAuth (Google, Discord, Facebook)
 - **Admin Panel** - Manage songs, verify submissions, update metadata
+- **Mobile Optimized** - Fully responsive with touch-friendly UI and safe area support
 
 ## Tech Stack
 
@@ -202,6 +203,7 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 | Discovery Panel | Near Me vs Map Center modes for global exploration | ✅ Done |
 | Radius Visualization | Subtle circle overlay showing discovery area | ✅ Done |
 | Full Spotify Playback | Web Playback SDK with OAuth (Premium users only) | ✅ Done |
+| Mobile Optimization | Responsive design with touch targets, media queries, safe areas | ✅ Done |
 
 ### Planned
 
@@ -209,7 +211,6 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth provider configurat
 |---------|-------------|----------|
 | Profile Editing | Update display name and avatar | High |
 | Drag Marker | Drag-to-reposition in location picker | Medium |
-| Mobile Responsiveness | Optimize UI for mobile devices | Medium |
 | Real Spotify Search | Enable when Spotify API signup reopens | Medium |
 
 ### Suggested
