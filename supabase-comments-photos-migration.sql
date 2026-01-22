@@ -7,7 +7,7 @@
 
 CREATE TABLE IF NOT EXISTS song_comments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content TEXT NOT NULL CHECK (char_length(content) > 0 AND char_length(content) <= 500),
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -55,7 +55,7 @@ CREATE POLICY "Admins can delete any comment"
 
 CREATE TABLE IF NOT EXISTS song_photos (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  song_id UUID NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   photo_url TEXT NOT NULL,
   caption TEXT CHECK (char_length(caption) <= 200),
