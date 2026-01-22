@@ -317,7 +317,8 @@ function AppContent() {
 
       {/* Map */}
       <MusicMap
-        songs={songs}
+        songs={songsInRadius}
+        allSongs={songs}
         currentSong={currentSong}
         selectedSong={selectedSong}
         onSongSelect={handleSongSelect}
@@ -325,6 +326,12 @@ function AppContent() {
         radius={radius}
         viewState={viewState}
         onViewStateChange={setViewState}
+        discoveryMode={discoveryMode}
+        discoveryCenter={
+          discoveryMode === 'nearby' 
+            ? userLocation 
+            : exploreCenter || { latitude: viewState.latitude, longitude: viewState.longitude }
+        }
       />
 
       {/* Discovery Panel */}

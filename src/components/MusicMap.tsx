@@ -1,5 +1,5 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
-import Map, { Marker, NavigationControl, GeolocateControl } from 'react-map-gl';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import Map, { Marker, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
 import type { MapRef } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { SongLocation, MapViewState } from '../types';
@@ -10,7 +10,8 @@ import { useCachedImage } from '../hooks/useCachedImage';
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
 
 interface MusicMapProps {
-  songs: SongLocation[];
+  songs: SongLocation[]; // Songs in range (filtered)
+  allSongs?: SongLocation[]; // All songs (for dimmed display)
   currentSong: SongLocation | null;
   selectedSong: SongLocation | null;
   onSongSelect: (song: SongLocation) => void;
@@ -18,6 +19,35 @@ interface MusicMapProps {
   radius: number;
   viewState: MapViewState;
   onViewStateChange: (viewState: MapViewState) => void;
+  discoveryMode?: 'nearby' | 'explore';
+  discoveryCenter?: { latitude: number; longitude: number } | null;
+}
+
+// Generate circle GeoJSON for radius visualization
+function createCircleGeoJSON(
+  centerLat: number, 
+  centerLng: number, 
+  radiusKm: number,
+  points: number = 64
+): GeoJSON.Feature<GeoJSON.Polygon> {
+  const coords: [number, number][] = [];
+  const earthRadius = 6371; // km
+  
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * 2 * Math.PI;
+    const latOffset = (radiusKm / earthRadius) * (180 / Math.PI) * Math.cos(angle);
+    const lngOffset = (radiusKm / earthRadius) * (180 / Math.PI) * Math.sin(angle) / Math.cos(centerLat * Math.PI / 180);
+    coords.push([centerLng + lngOffset, centerLat + latOffset]);
+  }
+  
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [coords]
+    }
+  };
 }
 
 // Album art marker component with image caching
@@ -134,29 +164,33 @@ function AlbumMarker({
 
 export function MusicMap({
   songs,
+  allSongs,
   currentSong,
   selectedSong,
   onSongSelect,
   userLocation,
   radius,
   viewState,
-  onViewStateChange
+  onViewStateChange,
+  discoveryMode = 'nearby',
+  discoveryCenter
 }: MusicMapProps) {
   const mapRef = useRef<MapRef>(null);
 
-  // Filter songs within radius
-  const songsInRadius = songs.filter(song => {
-    if (!userLocation) return true;
-    const R = 6371;
-    const dLat = (song.latitude - userLocation.latitude) * (Math.PI / 180);
-    const dLon = (song.longitude - userLocation.longitude) * (Math.PI / 180);
-    const a = Math.sin(dLat / 2) ** 2 + 
-              Math.cos(userLocation.latitude * Math.PI / 180) * 
-              Math.cos(song.latitude * Math.PI / 180) * 
-              Math.sin(dLon / 2) ** 2;
-    const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return distance <= radius;
-  });
+  // Get song IDs that are in range for quick lookup
+  const inRangeSongIds = useMemo(() => new Set(songs.map(s => s.id)), [songs]);
+
+  // Songs outside range (dimmed)
+  const songsOutOfRange = useMemo(() => {
+    if (!allSongs || radius === 0) return [];
+    return allSongs.filter(s => !inRangeSongIds.has(s.id));
+  }, [allSongs, inRangeSongIds, radius]);
+
+  // Generate radius circle GeoJSON
+  const radiusCircle = useMemo(() => {
+    if (radius === 0 || !discoveryCenter) return null;
+    return createCircleGeoJSON(discoveryCenter.latitude, discoveryCenter.longitude, radius);
+  }, [discoveryCenter, radius]);
 
   // Fly to song when selected
   useEffect(() => {
@@ -173,6 +207,9 @@ export function MusicMap({
     onViewStateChange(evt.viewState);
   }, [onViewStateChange]);
 
+  // Colors based on discovery mode
+  const circleColor = discoveryMode === 'nearby' ? '#10b981' : '#8b5cf6';
+
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <Map
@@ -186,13 +223,56 @@ export function MusicMap({
         <NavigationControl position="bottom-right" showCompass={false} />
         <GeolocateControl position="bottom-right" trackUserLocation />
 
+        {/* Radius circle visualization - subtle and transparent */}
+        {radiusCircle && (
+          <Source id="radius-circle" type="geojson" data={radiusCircle}>
+            {/* Fill */}
+            <Layer
+              id="radius-fill"
+              type="fill"
+              paint={{
+                'fill-color': circleColor,
+                'fill-opacity': 0.05
+              }}
+            />
+            {/* Border */}
+            <Layer
+              id="radius-border"
+              type="line"
+              paint={{
+                'line-color': circleColor,
+                'line-width': 2,
+                'line-opacity': 0.3,
+                'line-dasharray': [4, 4]
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Discovery center marker (for explore mode) */}
+        {discoveryMode === 'explore' && discoveryCenter && radius > 0 && (
+          <Marker latitude={discoveryCenter.latitude} longitude={discoveryCenter.longitude}>
+            <div style={{
+              width: 16,
+              height: 16,
+              background: circleColor,
+              borderRadius: '50%',
+              border: '2px solid white',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              opacity: 0.8
+            }} />
+          </Marker>
+        )}
+
         {/* User location marker */}
         {userLocation && (
           <Marker latitude={userLocation.latitude} longitude={userLocation.longitude}>
             <div style={{
               width: 24,
               height: 24,
-              background: 'linear-gradient(135deg, #1DB954, #FF6B6B)',
+              background: discoveryMode === 'nearby' 
+                ? 'linear-gradient(135deg, #10b981, #34d399)' 
+                : 'linear-gradient(135deg, #6b7280, #9ca3af)',
               borderRadius: '50%',
               border: '3px solid white',
               boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
@@ -200,8 +280,38 @@ export function MusicMap({
           </Marker>
         )}
 
-        {/* Song markers with album art */}
-        {songsInRadius.map(song => {
+        {/* Songs outside range (dimmed) */}
+        {songsOutOfRange.map(song => (
+          <Marker 
+            key={`dim-${song.id}`} 
+            latitude={song.latitude} 
+            longitude={song.longitude}
+            anchor="center"
+          >
+            <div
+              onClick={() => onSongSelect(song)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: '#1a1a1a',
+                border: '2px solid #333',
+                opacity: 0.4,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.2s ease'
+              }}
+              title={`${song.title} by ${song.artist} (outside range)`}
+            >
+              <Music size={14} color="#666" />
+            </div>
+          </Marker>
+        ))}
+
+        {/* Songs in range (full visibility) */}
+        {songs.map(song => {
           const isPlaying = currentSong?.id === song.id;
           const isSelected = selectedSong?.id === song.id;
           
