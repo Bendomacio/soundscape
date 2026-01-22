@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User, Session, Provider } from '@supabase/supabase-js';
 
@@ -31,15 +31,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Use refs to track initialization state (survives re-renders, no closure issues)
+  const isInitialized = useRef(false);
+  const isMounted = useRef(true);
 
-  // Fetch user profile from profiles table
-  async function fetchProfile(userId: string) {
+  // Fetch user profile from profiles table with timeout
+  async function fetchProfile(userId: string): Promise<Profile | null> {
     try {
-      const { data, error } = await supabase
+      // Race between the query and a timeout
+      const queryPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
+      
+      const timeoutPromise = new Promise<null>((resolve) => 
+        setTimeout(() => resolve(null), 5000)
+      );
+      
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      
+      if (!result || !('data' in result)) {
+        console.warn('Profile fetch timed out');
+        return null;
+      }
+
+      const { data, error } = result;
 
       if (error) {
         console.error('Error fetching profile:', error);
@@ -66,53 +84,95 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    let isMounted = true;
+    isMounted.current = true;
     
-    // Timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      if (isMounted && isLoading) {
-        console.warn('Auth initialization timed out');
-        setIsLoading(false);
-      }
-    }, 10000); // 10 second timeout
+    // Prevent double initialization (React StrictMode / HMR)
+    if (isInitialized.current) {
+      console.log('Auth already initialized, skipping');
+      return;
+    }
 
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
+    async function initAuth() {
+      console.log('Initializing auth...');
       
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        fetchProfile(session.user.id).then(profileData => {
-          if (!isMounted) return;
-          if (profileData) {
+      // Hard timeout - no matter what, stop loading after 5 seconds
+      const hardTimeout = setTimeout(() => {
+        if (isMounted.current && !isInitialized.current) {
+          console.warn('Auth hard timeout - forcing load complete');
+          isInitialized.current = true;
+          setIsLoading(false);
+        }
+      }, 5000);
+
+      try {
+        // Get session with a timeout wrapper
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<null>((resolve) => 
+          setTimeout(() => resolve(null), 4000)
+        );
+        
+        const result = await Promise.race([sessionPromise, timeoutPromise]);
+        
+        if (!isMounted.current) {
+          clearTimeout(hardTimeout);
+          return;
+        }
+
+        // If timeout won or no session
+        if (!result || !('data' in result)) {
+          console.warn('Session fetch timed out or failed');
+          isInitialized.current = true;
+          setIsLoading(false);
+          clearTimeout(hardTimeout);
+          return;
+        }
+
+        const { data: { session } } = result;
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          // Fetch profile but don't block on it
+          const profileData = await fetchProfile(session.user.id);
+          if (isMounted.current && profileData) {
             setProfile(profileData);
             setIsAdmin(profileData.is_admin);
           }
-          setIsLoading(false);
-        }).catch(() => {
-          if (isMounted) setIsLoading(false);
-        });
-      } else {
+        }
+        
+        isInitialized.current = true;
         setIsLoading(false);
+        clearTimeout(hardTimeout);
+        console.log('Auth initialized successfully');
+        
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+        if (isMounted.current) {
+          isInitialized.current = true;
+          setIsLoading(false);
+        }
       }
-    }).catch(() => {
-      if (isMounted) setIsLoading(false);
-    });
+    }
 
-    // Listen for auth changes
+    initAuth();
+
+    // Listen for auth changes (but don't set loading state)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!isMounted) return;
+      async (event, newSession) => {
+        if (!isMounted.current) return;
+        
+        // Skip INITIAL_SESSION event as we handle it above
+        if (event === 'INITIAL_SESSION') return;
+        
         console.log('Auth event:', event);
-        setSession(session);
-        setUser(session?.user ?? null);
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
 
-        if (session?.user) {
+        if (newSession?.user) {
           try {
-            const profileData = await fetchProfile(session.user.id);
-            if (isMounted && profileData) {
+            const profileData = await fetchProfile(newSession.user.id);
+            if (isMounted.current && profileData) {
               setProfile(profileData);
               setIsAdmin(profileData.is_admin);
             }
@@ -127,8 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     return () => {
-      isMounted = false;
-      clearTimeout(timeout);
+      isMounted.current = false;
       subscription.unsubscribe();
     };
   }, []);
