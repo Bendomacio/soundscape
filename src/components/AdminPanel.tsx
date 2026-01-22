@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   X, 
   Search, 
@@ -9,12 +9,17 @@ import {
   Music,
   ExternalLink,
   AlertCircle,
-  Loader
+  Loader,
+  Camera,
+  Check,
+  XCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 import { SpotifySearch } from './SpotifySearch';
-import type { SongLocation } from '../types';
+import type { SongLocation, SongPhoto } from '../types';
 import type { SpotifyTrack } from '../lib/spotify';
 import { getTrackInfo } from '../lib/spotify';
+import { getPendingPhotos, approvePhoto, rejectPhoto } from '../lib/comments';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -29,6 +34,37 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
   const [editingSong, setEditingSong] = useState<SongLocation | null>(null);
   const [showSpotifySearch, setShowSpotifySearch] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'songs' | 'photos'>('songs');
+  const [pendingPhotos, setPendingPhotos] = useState<SongPhoto[]>([]);
+  const [loadingPhotos, setLoadingPhotos] = useState(false);
+  const [processingPhoto, setProcessingPhoto] = useState<string | null>(null);
+
+  // Load pending photos when tab changes
+  useEffect(() => {
+    if (activeTab === 'photos' && pendingPhotos.length === 0) {
+      setLoadingPhotos(true);
+      getPendingPhotos().then(photos => {
+        setPendingPhotos(photos);
+        setLoadingPhotos(false);
+      });
+    }
+  }, [activeTab, pendingPhotos.length]);
+
+  const handleApprovePhoto = async (photoId: string) => {
+    setProcessingPhoto(photoId);
+    if (await approvePhoto(photoId)) {
+      setPendingPhotos(pendingPhotos.filter(p => p.id !== photoId));
+    }
+    setProcessingPhoto(null);
+  };
+
+  const handleRejectPhoto = async (photoId: string) => {
+    setProcessingPhoto(photoId);
+    if (await rejectPhoto(photoId)) {
+      setPendingPhotos(pendingPhotos.filter(p => p.id !== photoId));
+    }
+    setProcessingPhoto(null);
+  };
 
   if (!isOpen) return null;
 
@@ -124,7 +160,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
           <div>
             <h2 style={{ fontSize: '20px', fontWeight: 700, margin: 0 }}>Admin Panel</h2>
             <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>
-              Manage songs and fix Spotify links
+              Manage songs and approve photos
             </p>
           </div>
           <button
@@ -142,7 +178,69 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
           </button>
         </div>
 
-        {/* Search */}
+        {/* Tabs */}
+        <div style={{
+          display: 'flex',
+          gap: '4px',
+          padding: '16px 24px',
+          borderBottom: '1px solid var(--color-dark-lighter)'
+        }}>
+          <button
+            onClick={() => setActiveTab('songs')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: activeTab === 'songs' ? 'var(--color-dark-lighter)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              color: activeTab === 'songs' ? 'white' : 'var(--color-text-muted)',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
+          >
+            <Music size={16} />
+            Songs
+          </button>
+          <button
+            onClick={() => setActiveTab('photos')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: activeTab === 'photos' ? 'var(--color-dark-lighter)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              color: activeTab === 'photos' ? 'white' : 'var(--color-text-muted)',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              position: 'relative'
+            }}
+          >
+            <Camera size={16} />
+            Photos
+            {pendingPhotos.length > 0 && (
+              <span style={{
+                background: 'var(--color-accent)',
+                color: 'var(--color-dark)',
+                fontSize: '11px',
+                fontWeight: 700,
+                padding: '2px 6px',
+                borderRadius: '10px',
+                marginLeft: '4px'
+              }}>
+                {pendingPhotos.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Search - only for songs tab */}
+        {activeTab === 'songs' && (
         <div style={{
           padding: '16px 24px',
           borderBottom: '1px solid var(--color-dark-lighter)',
@@ -180,8 +278,10 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
             />
           </div>
         </div>
+        )}
 
         {/* Songs list */}
+        {activeTab === 'songs' && (
         <div style={{
           flex: 1,
           overflowY: 'auto',
@@ -366,6 +466,121 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong 
             )}
           </div>
         </div>
+        )}
+
+        {/* Photos list */}
+        {activeTab === 'photos' && (
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 24px'
+        }}>
+          {loadingPhotos ? (
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              <Loader size={24} className="animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+            </div>
+          ) : pendingPhotos.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--color-text-muted)' }}>
+              <ImageIcon size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+              <p>No photos pending approval</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {pendingPhotos.map(photo => (
+                <div 
+                  key={photo.id}
+                  style={{
+                    display: 'flex',
+                    gap: '16px',
+                    padding: '16px',
+                    background: 'var(--color-dark-lighter)',
+                    borderRadius: '12px'
+                  }}
+                >
+                  {/* Photo preview */}
+                  <div style={{
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    background: 'var(--color-dark-card)'
+                  }}>
+                    <img 
+                      src={photo.photoUrl}
+                      alt="Pending photo"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+
+                  {/* Photo info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 600, margin: '0 0 4px 0' }}>
+                      Photo by {photo.userDisplayName || 'Unknown'}
+                    </p>
+                    {photo.caption && (
+                      <p style={{ fontSize: '14px', color: 'var(--color-text-muted)', margin: '0 0 8px 0' }}>
+                        "{photo.caption}"
+                      </p>
+                    )}
+                    <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', margin: 0 }}>
+                      Submitted {photo.createdAt.toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flexShrink: 0 }}>
+                    {processingPhoto === photo.id ? (
+                      <Loader size={20} className="animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleApprovePhoto(photo.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            background: 'rgba(16, 185, 129, 0.2)',
+                            color: 'var(--color-primary)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Check size={16} />
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectPhoto(photo.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#f87171',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <XCircle size={16} />
+                          Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        )}
 
         {/* Stats footer */}
         <div style={{

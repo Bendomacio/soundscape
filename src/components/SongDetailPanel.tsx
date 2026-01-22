@@ -149,13 +149,21 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
     if (!user || !newComment.trim()) return;
     
     setIsSubmittingComment(true);
-    const comment = await addComment(song.id, user.id, newComment);
-    if (comment) {
-      // Add profile info from current user
-      comment.userDisplayName = profile?.display_name || user.email || 'Anonymous';
-      comment.userAvatarUrl = profile?.avatar_url;
-      setComments([comment, ...comments]);
-      setNewComment('');
+    try {
+      const comment = await addComment(song.id, user.id, newComment);
+      if (comment) {
+        // Add profile info from current user
+        comment.userDisplayName = profile?.display_name || user.email || 'Anonymous';
+        comment.userAvatarUrl = profile?.avatar_url;
+        setComments([comment, ...comments]);
+        setNewComment('');
+      } else {
+        console.error('Failed to add comment - no data returned');
+        alert('Failed to add comment. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error submitting comment:', err);
+      alert('Failed to add comment. Please try again.');
     }
     setIsSubmittingComment(false);
   };
