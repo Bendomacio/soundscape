@@ -1,17 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { 
-  X, 
-  MapPin, 
+import {
+  X,
+  MapPin,
   Heart,
-  Share2, 
-  ExternalLink, 
+  Share2,
+  ExternalLink,
   CheckCircle,
   Music,
   User,
   Tag,
   Play,
   Pause,
-  Loader2,
   MessageCircle,
   Camera,
   Send,
@@ -24,6 +23,7 @@ import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getComments, addComment, deleteComment, getPhotos, uploadPhoto } from '../lib/comments';
 import { likeSong, unlikeSong, hasUserLikedSong, getSongLikeCount } from '../lib/songs';
+import { LoadingSpinner, UserAvatar, EmptyState } from './ui';
 
 interface SongDetailPanelProps {
   song: SongLocation;
@@ -374,7 +374,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                   onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
                 >
                   {isThisSongLoading ? (
-                    <Loader2 size={24} className="animate-spin" />
+                    <LoadingSpinner size={24} />
                   ) : isThisSongPlaying ? (
                     <Pause size={24} fill="currentColor" />
                   ) : (
@@ -657,33 +657,20 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
               <div>
                 {/* Add comment input */}
                 {user ? (
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '8px', 
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
                     marginBottom: '16px',
                     padding: '12px',
                     background: 'var(--color-dark-lighter)',
                     borderRadius: '12px'
                   }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '50%',
-                      background: 'var(--color-primary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      overflow: 'hidden'
-                    }}>
-                      {profile?.avatar_url ? (
-                        <img src={profile.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: '14px', fontWeight: 600 }}>
-                          {(profile?.display_name || user.email)?.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
+                    <UserAvatar
+                      avatarUrl={profile?.avatar_url}
+                      displayName={profile?.display_name}
+                      email={user.email}
+                      size={32}
+                    />
                     <input
                       type="text"
                       value={newComment}
@@ -717,7 +704,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                         transition: 'all 0.2s'
                       }}
                     >
-                      {isSubmittingComment ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                      {isSubmittingComment ? <LoadingSpinner size={16} /> : <Send size={16} />}
                     </button>
                   </div>
                 ) : (
@@ -737,22 +724,14 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                 {/* Comments list */}
                 {loadingComments ? (
                   <div style={{ textAlign: 'center', padding: '20px' }}>
-                    <Loader2 size={24} className="animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+                    <LoadingSpinner size={24} style={{ color: 'var(--color-text-muted)' }} />
                   </div>
                 ) : comments.length === 0 ? (
-                  <div style={{ 
-                    textAlign: 'center', 
-                    padding: '24px',
-                    color: 'var(--color-text-muted)',
-                    fontSize: '14px'
-                  }}>
-                    <MessageCircle size={32} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-                    <p>No comments yet. Be the first!</p>
-                  </div>
+                  <EmptyState icon={MessageCircle} message="No comments yet. Be the first!" />
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {comments.map(comment => (
-                      <div 
+                      <div
                         key={comment.id}
                         style={{
                           display: 'flex',
@@ -762,23 +741,12 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                           borderRadius: '12px'
                         }}
                       >
-                        <div style={{
-                          width: '32px',
-                          height: '32px',
-                          borderRadius: '50%',
-                          background: 'var(--color-dark-card)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          overflow: 'hidden'
-                        }}>
-                          {comment.userAvatarUrl ? (
-                            <img src={comment.userAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            <User size={14} style={{ color: 'var(--color-text-muted)' }} />
-                          )}
-                        </div>
+                        <UserAvatar
+                          avatarUrl={comment.userAvatarUrl}
+                          size={32}
+                          bgColor="var(--color-dark-card)"
+                          showFallbackIcon
+                        />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                             <span style={{ fontWeight: 600, fontSize: '13px' }}>{comment.userDisplayName}</span>
@@ -852,7 +820,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                       }}
                     >
                       {isUploadingPhoto ? (
-                        <><Loader2 size={18} className="animate-spin" /> Uploading...</>
+                        <><LoadingSpinner size={18} /> Uploading...</>
                       ) : (
                         <><Camera size={18} /> Share a photo from this location</>
                       )}
@@ -872,18 +840,10 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                 {/* Photos grid */}
                 {loadingPhotos ? (
                   <div style={{ textAlign: 'center', padding: '20px' }}>
-                    <Loader2 size={24} className="animate-spin" style={{ color: 'var(--color-text-muted)' }} />
+                    <LoadingSpinner size={24} style={{ color: 'var(--color-text-muted)' }} />
                   </div>
                 ) : photos.length === 0 ? (
-                  <div style={{ 
-                    textAlign: 'center', 
-                    padding: '24px',
-                    color: 'var(--color-text-muted)',
-                    fontSize: '14px'
-                  }}>
-                    <ImageIcon size={32} style={{ margin: '0 auto 8px', opacity: 0.3 }} />
-                    <p>No photos yet. Be the first to share!</p>
-                  </div>
+                  <EmptyState icon={ImageIcon} message="No photos yet. Be the first to share!" />
                 ) : (
                   <div style={{ 
                     display: 'grid', 

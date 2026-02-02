@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { SongComment, SongPhoto } from '../types';
+import { logger } from './logger';
 
 // ============================================
 // COMMENTS
@@ -14,7 +15,7 @@ export async function getComments(songId: string): Promise<SongComment[]> {
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching comments:', error);
+    logger.error('Error fetching comments:', error);
     return [];
   }
 
@@ -55,7 +56,7 @@ export async function addComment(songId: string, userId: string, content: string
     .single();
 
   if (error) {
-    console.error('Error adding comment:', error);
+    logger.error('Error adding comment:', error);
     return null;
   }
 
@@ -76,7 +77,7 @@ export async function deleteComment(commentId: string): Promise<boolean> {
     .eq('id', commentId);
 
   if (error) {
-    console.error('Error deleting comment:', error);
+    logger.error('Error deleting comment:', error);
     return false;
   }
   return true;
@@ -101,7 +102,7 @@ export async function getPhotos(songId: string, includeUnapproved = false): Prom
   const { data: photos, error } = await query;
 
   if (error) {
-    console.error('Error fetching photos:', error);
+    logger.error('Error fetching photos:', error);
     return [];
   }
 
@@ -148,7 +149,7 @@ export async function uploadPhoto(
     .upload(fileName, file);
 
   if (uploadError) {
-    console.error('Error uploading photo:', uploadError);
+    logger.error('Error uploading photo:', uploadError);
     return null;
   }
 
@@ -171,7 +172,7 @@ export async function uploadPhoto(
     .single();
 
   if (error) {
-    console.error('Error creating photo record:', error);
+    logger.error('Error creating photo record:', error);
     return null;
   }
 
@@ -194,7 +195,7 @@ export async function deletePhoto(photoId: string): Promise<boolean> {
     .eq('id', photoId);
 
   if (error) {
-    console.error('Error deleting photo:', error);
+    logger.error('Error deleting photo:', error);
     return false;
   }
   return true;
@@ -210,7 +211,7 @@ export async function getPendingPhotos(): Promise<SongPhoto[]> {
     .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching pending photos:', error);
+    logger.error('Error fetching pending photos:', error);
     return [];
   }
 
@@ -248,7 +249,7 @@ export async function approvePhoto(photoId: string): Promise<boolean> {
     .eq('id', photoId);
 
   if (error) {
-    console.error('Error approving photo:', error);
+    logger.error('Error approving photo:', error);
     return false;
   }
   return true;
@@ -261,7 +262,7 @@ export async function rejectPhoto(photoId: string): Promise<boolean> {
     .eq('id', photoId);
 
   if (error) {
-    console.error('Error rejecting photo:', error);
+    logger.error('Error rejecting photo:', error);
     return false;
   }
   return true;

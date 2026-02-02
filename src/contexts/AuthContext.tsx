@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User, Session, Provider } from '@supabase/supabase-js';
+import { logger } from '../lib/logger';
 
 interface Profile {
   id: string;
@@ -53,20 +54,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await Promise.race([queryPromise, timeoutPromise]);
       
       if (!result || !('data' in result)) {
-        console.warn('Profile fetch timed out');
+        logger.warn('Profile fetch timed out');
         return null;
       }
 
       const { data, error } = result;
 
       if (error) {
-        console.error('Error fetching profile:', error);
+        logger.error('Error fetching profile:', error);
         return null;
       }
 
       return data as Profile;
     } catch (err) {
-      console.error('Failed to fetch profile:', err);
+      logger.error('Failed to fetch profile:', err);
       return null;
     }
   }
@@ -88,17 +89,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     // Prevent double initialization (React StrictMode / HMR)
     if (isInitialized.current) {
-      console.log('Auth already initialized, skipping');
+      logger.debug('Auth already initialized, skipping');
       return;
     }
 
     async function initAuth() {
-      console.log('Initializing auth...');
-      
+      logger.debug('Initializing auth...');
+
       // Hard timeout - no matter what, stop loading after 5 seconds
       const hardTimeout = setTimeout(() => {
         if (isMounted.current && !isInitialized.current) {
-          console.warn('Auth hard timeout - forcing load complete');
+          logger.warn('Auth hard timeout - forcing load complete');
           isInitialized.current = true;
           setIsLoading(false);
         }
@@ -120,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // If timeout won or no session
         if (!result || !('data' in result)) {
-          console.warn('Session fetch timed out or failed');
+          logger.warn('Session fetch timed out or failed');
           isInitialized.current = true;
           setIsLoading(false);
           clearTimeout(hardTimeout);
@@ -144,10 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isInitialized.current = true;
         setIsLoading(false);
         clearTimeout(hardTimeout);
-        console.log('Auth initialized successfully');
-        
+        logger.debug('Auth initialized successfully');
+
       } catch (err) {
-        console.error('Auth initialization error:', err);
+        logger.error('Auth initialization error:', err);
         if (isMounted.current) {
           isInitialized.current = true;
           setIsLoading(false);
@@ -164,8 +165,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Skip INITIAL_SESSION event as we handle it above
         if (event === 'INITIAL_SESSION') return;
-        
-        console.log('Auth event:', event);
+
+        logger.debug('Auth event:', event);
         setSession(newSession);
         setUser(newSession?.user ?? null);
 
@@ -177,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setIsAdmin(profileData.is_admin);
             }
           } catch (err) {
-            console.error('Failed to fetch profile on auth change:', err);
+            logger.error('Failed to fetch profile on auth change:', err);
           }
         } else {
           setProfile(null);

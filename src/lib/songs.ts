@@ -1,35 +1,37 @@
 import { supabase } from './supabase';
 import type { SongLocation, SongStatus } from '../types';
+import type { DbSongRow, DbSongRowUpdate } from '../types/database';
 import { londonSongs } from '../data/londonSongs';
+import { logger } from './logger';
 
 // Convert database row to SongLocation type
-function dbToSong(row: any): SongLocation {
+function dbToSong(row: DbSongRow): SongLocation {
   return {
     id: row.id,
     title: row.title,
     artist: row.artist,
-    album: row.album,
-    albumArt: row.album_art,
-    spotifyUri: row.spotify_uri,
+    album: row.album ?? undefined,
+    albumArt: row.album_art ?? undefined,
+    spotifyUri: row.spotify_uri ?? undefined,
     latitude: row.latitude,
     longitude: row.longitude,
     locationName: row.location_name,
-    locationDescription: row.location_description,
-    locationImage: row.location_image,
+    locationDescription: row.location_description ?? undefined,
+    locationImage: row.location_image ?? undefined,
     upvotes: row.upvotes || 0,
     verified: row.verified || false,
-    tags: row.tags || [],
-    userId: row.user_id,
-    submittedBy: row.submitted_by,
+    tags: row.tags ?? [],
+    userId: row.user_id ?? undefined,
+    submittedBy: row.submitted_by ?? undefined,
     submittedAt: row.created_at ? new Date(row.created_at) : undefined,
     status: row.status || 'live',
-    adminNotes: row.admin_notes
+    adminNotes: row.admin_notes ?? undefined
   };
 }
 
 // Convert SongLocation to database format
-function songToDb(song: Partial<SongLocation> & { id?: string }) {
-  const db: any = {};
+function songToDb(song: Partial<SongLocation> & { id?: string }): DbSongRowUpdate & { id?: string } {
+  const db: DbSongRowUpdate & { id?: string } = {};
   if (song.id !== undefined) db.id = song.id;
   if (song.title !== undefined) db.title = song.title;
   if (song.artist !== undefined) db.artist = song.artist;
@@ -61,7 +63,7 @@ function isSupabaseConfigured(): boolean {
 // Fetch all songs with timeout
 export async function fetchSongs(): Promise<SongLocation[]> {
   if (!isSupabaseConfigured()) {
-    console.log('Supabase not configured, using mock data');
+    logger.debug('Supabase not configured, using mock data');
     return londonSongs;
   }
 
@@ -79,18 +81,18 @@ export async function fetchSongs(): Promise<SongLocation[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (error) {
-      console.error('Error fetching songs:', error);
+      logger.error('Error fetching songs:', error);
       return londonSongs;
     }
 
     if (!data || data.length === 0) {
-      console.log('No songs in database, using mock data');
+      logger.debug('No songs in database, using mock data');
       return londonSongs;
     }
 
     return data.map(dbToSong);
   } catch (err) {
-    console.error('Failed to fetch songs:', err);
+    logger.error('Failed to fetch songs:', err);
     return londonSongs;
   }
 }
@@ -98,7 +100,7 @@ export async function fetchSongs(): Promise<SongLocation[]> {
 // Update a song
 export async function updateSong(songId: string, updates: Partial<SongLocation>): Promise<boolean> {
   if (!isSupabaseConfigured()) {
-    console.warn('Supabase not configured, update not persisted');
+    logger.warn('Supabase not configured, update not persisted');
     return false;
   }
 
@@ -109,13 +111,13 @@ export async function updateSong(songId: string, updates: Partial<SongLocation>)
       .eq('id', songId);
 
     if (error) {
-      console.error('Error updating song:', error);
+      logger.error('Error updating song:', error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error('Failed to update song:', err);
+    logger.error('Failed to update song:', err);
     return false;
   }
 }
@@ -123,7 +125,7 @@ export async function updateSong(songId: string, updates: Partial<SongLocation>)
 // Add a new song
 export async function addSong(song: SongLocation): Promise<boolean> {
   if (!isSupabaseConfigured()) {
-    console.warn('Supabase not configured, song not persisted');
+    logger.warn('Supabase not configured, song not persisted');
     return false;
   }
 
@@ -133,13 +135,13 @@ export async function addSong(song: SongLocation): Promise<boolean> {
       .insert(songToDb(song));
 
     if (error) {
-      console.error('Error adding song:', error);
+      logger.error('Error adding song:', error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error('Failed to add song:', err);
+    logger.error('Failed to add song:', err);
     return false;
   }
 }
@@ -147,7 +149,7 @@ export async function addSong(song: SongLocation): Promise<boolean> {
 // Delete a song
 export async function deleteSong(songId: string): Promise<boolean> {
   if (!isSupabaseConfigured()) {
-    console.warn('Supabase not configured, delete not persisted');
+    logger.warn('Supabase not configured, delete not persisted');
     return false;
   }
 
@@ -158,13 +160,13 @@ export async function deleteSong(songId: string): Promise<boolean> {
       .eq('id', songId);
 
     if (error) {
-      console.error('Error deleting song:', error);
+      logger.error('Error deleting song:', error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error('Failed to delete song:', err);
+    logger.error('Failed to delete song:', err);
     return false;
   }
 }
@@ -186,7 +188,7 @@ export async function hasUserLikedSong(songId: string, userId: string): Promise<
       .single();
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('Error checking like:', error);
+      logger.error('Error checking like:', error);
       return false;
     }
 
@@ -207,7 +209,7 @@ export async function getSongLikeCount(songId: string): Promise<number> {
       .eq('song_id', songId);
 
     if (error) {
-      console.error('Error getting like count:', error);
+      logger.error('Error getting like count:', error);
       return 0;
     }
 
@@ -228,10 +230,10 @@ export async function likeSong(songId: string, userId: string): Promise<boolean>
 
     if (error) {
       if (error.code === '23505') { // Unique constraint violation = already liked
-        console.log('User already liked this song');
+        logger.debug('User already liked this song');
         return false;
       }
-      console.error('Error liking song:', error);
+      logger.error('Error liking song:', error);
       return false;
     }
 
@@ -244,7 +246,7 @@ export async function likeSong(songId: string, userId: string): Promise<boolean>
 
     return true;
   } catch (err) {
-    console.error('Failed to like song:', err);
+    logger.error('Failed to like song:', err);
     return false;
   }
 }
@@ -261,7 +263,7 @@ export async function unlikeSong(songId: string, userId: string): Promise<boolea
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Error unliking song:', error);
+      logger.error('Error unliking song:', error);
       return false;
     }
 
@@ -274,7 +276,7 @@ export async function unlikeSong(songId: string, userId: string): Promise<boolea
 
     return true;
   } catch (err) {
-    console.error('Failed to unlike song:', err);
+    logger.error('Failed to unlike song:', err);
     return false;
   }
 }
@@ -290,7 +292,7 @@ export async function getUserLikedSongIds(userId: string): Promise<string[]> {
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Error getting user likes:', error);
+      logger.error('Error getting user likes:', error);
       return [];
     }
 
@@ -316,13 +318,13 @@ export async function fetchUserSongs(userId: string): Promise<SongLocation[]> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching user songs:', error);
+      logger.error('Error fetching user songs:', error);
       return [];
     }
 
     return data?.map(dbToSong) || [];
   } catch (err) {
-    console.error('Failed to fetch user songs:', err);
+    logger.error('Failed to fetch user songs:', err);
     return [];
   }
 }
@@ -340,7 +342,7 @@ export async function setSongStatus(
   if (!isSupabaseConfigured()) return false;
 
   try {
-    const updates: any = { status };
+    const updates: DbSongRowUpdate = { status };
     if (adminNotes !== undefined) {
       updates.admin_notes = adminNotes;
     }
@@ -351,13 +353,13 @@ export async function setSongStatus(
       .eq('id', songId);
 
     if (error) {
-      console.error('Error updating song status:', error);
+      logger.error('Error updating song status:', error);
       return false;
     }
 
     return true;
   } catch (err) {
-    console.error('Failed to update song status:', err);
+    logger.error('Failed to update song status:', err);
     return false;
   }
 }
@@ -373,13 +375,13 @@ export async function fetchAllSongsAdmin(): Promise<SongLocation[]> {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching songs for admin:', error);
+      logger.error('Error fetching songs for admin:', error);
       return [];
     }
 
     return data?.map(dbToSong) || [];
   } catch (err) {
-    console.error('Failed to fetch songs for admin:', err);
+    logger.error('Failed to fetch songs for admin:', err);
     return [];
   }
 }

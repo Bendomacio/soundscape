@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Loader2, Check, Unlink } from 'lucide-react';
+import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Check, Unlink } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
+import { LoadingSpinner, UserAvatar } from './ui';
 
 interface HeaderProps {
   onSubmitClick: () => void;
@@ -97,26 +98,21 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
           
           {/* User button / menu */}
           <div className="relative" ref={menuRef}>
-            <button 
+            <button
               onClick={() => user ? setShowUserMenu(!showUserMenu) : onLoginClick()}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors overflow-hidden ${
-                user 
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'bg-[var(--color-dark-card)] border border-[var(--color-dark-lighter)] hover:bg-[var(--color-dark-lighter)]'
-              }`}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-colors overflow-hidden"
+              style={{
+                background: user ? 'transparent' : 'var(--color-dark-card)',
+                border: user ? 'none' : '1px solid var(--color-dark-lighter)'
+              }}
             >
               {user ? (
-                profile?.avatar_url ? (
-                  <img 
-                    src={profile.avatar_url} 
-                    alt="" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-sm font-bold">
-                    {(profile?.display_name || user.email)?.charAt(0).toUpperCase()}
-                  </span>
-                )
+                <UserAvatar
+                  avatarUrl={profile?.avatar_url}
+                  displayName={profile?.display_name}
+                  email={user.email}
+                  size={40}
+                />
               ) : (
                 <User className="w-5 h-5 text-[var(--color-text-muted)]" />
               )}
@@ -143,7 +139,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                         <span className="text-sm text-[var(--color-text-muted)]">Spotify</span>
                       </div>
                       {connection.isConnecting ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-[var(--color-text-muted)]" />
+                        <LoadingSpinner size={16} className="text-[var(--color-text-muted)]" />
                       ) : connection.isConnected ? (
                         <div className="flex items-center gap-1">
                           <Check className="w-3 h-3 text-[#1DB954]" />

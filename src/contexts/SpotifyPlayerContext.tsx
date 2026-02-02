@@ -1,13 +1,21 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { SongLocation } from '../types';
-import { 
-  getSpotifyUserAuth, 
-  isSpotifyConnected, 
-  initiateSpotifyLogin, 
+import type {
+  SpotifyWebPlayer,
+  SpotifyPlaybackState,
+  SpotifyEmbedController,
+  SpotifyIFrameAPI,
+  SpotifyEmbedPlaybackUpdate
+} from '../types/spotify-sdk';
+import {
+  getSpotifyUserAuth,
+  isSpotifyConnected,
+  initiateSpotifyLogin,
   clearSpotifyAuth,
   getSpotifyUserProfile,
-  type SpotifyUserAuth 
+  type SpotifyUserAuth
 } from '../lib/spotify';
+import { logger } from '../lib/logger';
 
 interface SpotifyPlayerState {
   currentSong: SongLocation | null;
@@ -47,40 +55,6 @@ export function useSpotifyPlayer() {
   return context;
 }
 
-// Spotify Web Playback SDK types
-interface SpotifyPlayer {
-  connect: () => Promise<boolean>;
-  disconnect: () => void;
-  addListener: (event: string, callback: (data: any) => void) => void;
-  removeListener: (event: string) => void;
-  getCurrentState: () => Promise<any>;
-  setName: (name: string) => void;
-  getVolume: () => Promise<number>;
-  setVolume: (volume: number) => Promise<void>;
-  pause: () => Promise<void>;
-  resume: () => Promise<void>;
-  togglePlay: () => Promise<void>;
-  seek: (positionMs: number) => Promise<void>;
-  previousTrack: () => Promise<void>;
-  nextTrack: () => Promise<void>;
-  activateElement: () => Promise<void>;
-}
-
-declare global {
-  interface Window {
-    onSpotifyWebPlaybackSDKReady: () => void;
-    Spotify: {
-      Player: new (options: {
-        name: string;
-        getOAuthToken: (cb: (token: string) => void) => void;
-        volume?: number;
-      }) => SpotifyPlayer;
-    };
-    onSpotifyIframeApiReady: (IFrameAPI: any) => void;
-    SpotifyIFrameAPI: any;
-  }
-}
-
 export function SpotifyPlayerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<SpotifyPlayerState>({
     currentSong: null,
@@ -98,9 +72,9 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     isConnecting: false
   });
 
-  const playerRef = useRef<SpotifyPlayer | null>(null);
+  const playerRef = useRef<SpotifyWebPlayer | null>(null);
   const deviceIdRef = useRef<string | null>(null);
-  const embedControllerRef = useRef<any>(null);
+  const embedControllerRef = useRef<SpotifyEmbedController | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const authRef = useRef<SpotifyUserAuth | null>(null);
   const positionIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -166,7 +140,7 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
 
   async function createPlayer() {
     const auth = await getSpotifyUserAuth();
-    if (!auth) return;
+    if (!auth || !window.Spotify) return;
 
     const player = new window.Spotify.Player({
       name: 'Soundscape Player',
@@ -180,21 +154,20 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     });
 
     player.addListener('ready', ({ device_id }: { device_id: string }) => {
-      console.log('Spotify Player ready with device ID:', device_id);
+      logger.debug('Spotify Player ready with device ID:', device_id);
       deviceIdRef.current = device_id;
     });
 
     player.addListener('not_ready', ({ device_id }: { device_id: string }) => {
-      console.log('Device has gone offline:', device_id);
+      logger.debug('Device has gone offline:', device_id);
       deviceIdRef.current = null;
     });
 
-    player.addListener('player_state_changed', (state: any) => {
-      if (!state) return;
-      
-      const { paused, position, duration, track_window } = state;
-      const currentTrack = track_window?.current_track;
-      
+    player.addListener('player_state_changed', (playerState: SpotifyPlaybackState | null) => {
+      if (!playerState) return;
+
+      const { paused, position, duration } = playerState;
+
       setState(prev => ({
         ...prev,
         isPlaying: !paused,
@@ -205,38 +178,38 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     });
 
     player.addListener('initialization_error', ({ message }: { message: string }) => {
-      console.error('Spotify initialization error:', message);
+      logger.error('Spotify initialization error:', message);
       setState(prev => ({ ...prev, error: message }));
     });
 
     player.addListener('authentication_error', ({ message }: { message: string }) => {
-      console.error('Spotify auth error:', message);
+      logger.error('Spotify auth error:', message);
       clearSpotifyAuth();
       setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
     });
 
     player.addListener('playback_error', ({ message }: { message: string }) => {
-      console.error('Spotify playback error:', message);
+      logger.error('Spotify playback error:', message);
       setState(prev => ({ ...prev, error: message, isLoading: false }));
     });
 
     const connected = await player.connect();
     if (connected) {
       playerRef.current = player;
-      console.log('Spotify Player connected successfully');
+      logger.debug('Spotify Player connected successfully');
     }
   }
 
   // Load IFrame API as fallback
   useEffect(() => {
-    if ((window as any).SpotifyIFrameAPI) return;
+    if (window.SpotifyIFrameAPI) return;
 
     const script = document.createElement('script');
     script.src = 'https://open.spotify.com/embed/iframe-api/v1';
     script.async = true;
 
-    window.onSpotifyIframeApiReady = (IFrameAPI: any) => {
-      (window as any).SpotifyIFrameAPI = IFrameAPI;
+    window.onSpotifyIframeApiReady = (IFrameAPI: SpotifyIFrameAPI) => {
+      window.SpotifyIFrameAPI = IFrameAPI;
     };
 
     document.body.appendChild(script);
@@ -267,7 +240,7 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
   const playWithSDK = useCallback(async (song: SongLocation) => {
     const trackId = song.spotifyUri?.replace('spotify:track:', '');
     if (!trackId || !deviceIdRef.current) {
-      console.error('No track ID or device ID');
+      logger.error('No track ID or device ID');
       return false;
     }
 
@@ -293,10 +266,10 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
         return true;
       }
 
-      console.error('Play failed:', response.status);
+      logger.error('Play failed:', response.status);
       return false;
     } catch (error) {
-      console.error('Failed to play track:', error);
+      logger.error('Failed to play track:', error);
       return false;
     }
   }, []);
@@ -324,7 +297,12 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
         setState(prev => ({ ...prev, isPlaying: true, isLoading: false }));
         return;
       } catch (e) {
-        try { embedControllerRef.current.destroy(); } catch {}
+        logger.warn('Failed to reuse embed controller, recreating', e);
+        try {
+          embedControllerRef.current?.destroy();
+        } catch (destroyErr) {
+          logger.warn('Failed to destroy embed controller', destroyErr);
+        }
         embedControllerRef.current = null;
       }
     }
@@ -337,7 +315,7 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     
     container.innerHTML = '';
 
-    const IFrameAPI = (window as any).SpotifyIFrameAPI;
+    const IFrameAPI = window.SpotifyIFrameAPI;
     
     if (!IFrameAPI) {
       // Fallback: regular iframe
@@ -356,12 +334,12 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     const songId = song.id;
 
     IFrameAPI.createController(
-      container, 
-      { uri, width: '100%', height: 80 }, 
-      (controller: any) => {
+      container,
+      { uri, width: '100%', height: 80 },
+      (controller: SpotifyEmbedController) => {
         embedControllerRef.current = controller;
-        
-        controller.addListener('playback_update', (e: any) => {
+
+        controller.addListener('playback_update', (e: SpotifyEmbedPlaybackUpdate) => {
           if (!e?.data || typeof e.data.isPaused !== 'boolean') return;
           setState(prev => {
             if (prev.currentSong?.id === songId) {
@@ -378,7 +356,7 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
             }
             return prev;
           });
-          
+
           try {
             controller.play();
             setState(prev => {
@@ -388,7 +366,7 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
               return prev;
             });
           } catch (e) {
-            console.error('Auto-play failed:', e);
+            logger.warn('Auto-play failed:', e);
           }
         });
       }
@@ -422,7 +400,11 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     if (playerRef.current && connection.isPremium) {
       await playerRef.current.pause();
     } else if (embedControllerRef.current) {
-      try { embedControllerRef.current.pause(); } catch {}
+      try {
+        embedControllerRef.current.pause();
+      } catch (err) {
+        logger.warn('Failed to pause embed controller', err);
+      }
     }
     setState(prev => ({ ...prev, isPlaying: false }));
   }, [connection.isPremium]);
@@ -431,7 +413,11 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     if (playerRef.current && connection.isPremium) {
       await playerRef.current.resume();
     } else if (embedControllerRef.current) {
-      try { embedControllerRef.current.resume(); } catch {}
+      try {
+        embedControllerRef.current.resume();
+      } catch (err) {
+        logger.warn('Failed to resume embed controller', err);
+      }
     }
     setState(prev => ({ ...prev, isPlaying: true }));
   }, [connection.isPremium]);
@@ -442,7 +428,8 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
     } else if (embedControllerRef.current) {
       try {
         embedControllerRef.current.togglePlay();
-      } catch {
+      } catch (err) {
+        logger.warn('Failed to toggle play on embed controller', err);
         state.isPlaying ? pause() : resume();
       }
     } else if (state.currentSong) {
@@ -462,7 +449,11 @@ export function SpotifyPlayerProvider({ children }: { children: React.ReactNode 
       playerRef.current.pause();
     }
     if (embedControllerRef.current) {
-      try { embedControllerRef.current.destroy(); } catch {}
+      try {
+        embedControllerRef.current.destroy();
+      } catch (err) {
+        logger.warn('Failed to destroy embed controller on stop', err);
+      }
       embedControllerRef.current = null;
     }
     if (containerRef.current) {
