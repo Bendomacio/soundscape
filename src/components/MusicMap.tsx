@@ -338,6 +338,10 @@ export function MusicMap({
           0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
           50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.1; }
         }
+        /* Offset map controls above the music player bar */
+        .mapboxgl-ctrl-bottom-right {
+          bottom: 100px !important;
+        }
       `}</style>
     </div>
   );
