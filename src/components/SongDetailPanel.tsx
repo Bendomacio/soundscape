@@ -145,12 +145,14 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
 
   // Calculate related songs (same artist)
   const relatedSongs = useMemo(() => {
-    if (!allSongs.length) return [];
+    if (!allSongs.length || !song.artist) return [];
+    const currentArtist = song.artist.toLowerCase().trim();
     return allSongs
       .filter(s =>
         s.id !== song.id &&
         s.spotifyUri &&
-        s.artist.toLowerCase() === song.artist.toLowerCase()
+        s.artist &&
+        s.artist.toLowerCase().trim() === currentArtist
       )
       .slice(0, 10); // Max 10 songs
   }, [allSongs, song.id, song.artist]);
