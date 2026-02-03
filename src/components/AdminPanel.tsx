@@ -1253,7 +1253,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           }}>
             <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 8px 0' }}>Import Songs</h3>
             <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 12px 0' }}>
-              Upload a CSV file to import new songs. Required columns: title, artist, latitude, longitude, location_name
+              CSV columns: title, artist, latitude, longitude, location_name, location_description. ID, spotify_uri, album, tags, and status are auto-populated.
             </p>
 
             {/* Hidden file input */}
@@ -2172,16 +2172,24 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
 
                         const toImport = importedSongs.filter(s => !s._duplicate && !s._excluded);
 
-                        for (const song of toImport) {
+                        for (let i = 0; i < toImport.length; i++) {
+                          const song = toImport[i];
                           const lookup = lookupResults.get(song._importId);
 
-                          // Build the full song object
+                          // Generate unique ID: user-YYYYMMDD-XXX
+                          const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+                          const uniqueNum = String(Date.now() % 1000 + i).padStart(3, '0');
+
+                          // Build the full song object with auto-populated fields
                           const fullSong: SongLocation = {
-                            id: `user-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+                            id: `user-${dateStr}-${uniqueNum}`,
                             title: song.title || '',
                             artist: song.artist || '',
-                            album: song.album,
+                            // Album from lookup (iTunes/song.link)
+                            album: lookup?.albumName || song.album || undefined,
+                            // Album art from lookup
                             albumArt: lookup?.albumArt || '',
+                            // Spotify URI from CSV or lookup
                             spotifyUri: song.spotifyUri || lookup?.spotifyUri || undefined,
                             latitude: song.latitude || 0,
                             longitude: song.longitude || 0,
@@ -2189,7 +2197,9 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                             locationDescription: song.locationDescription,
                             upvotes: 0,
                             verified: true,
-                            tags: song.tags,
+                            // Tags from CSV or empty
+                            tags: song.tags || [],
+                            // Status always 'live' for imports
                             status: 'live',
                             providerLinks: {
                               ...song.providerLinks,

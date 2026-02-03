@@ -45,6 +45,7 @@ export interface SpotifyLookupResult {
   youtubeId: string | null;
   appleMusicId: string | null;
   albumArt: string | null;
+  albumName: string | null;
   matchedTitle: string;
   matchedArtist: string;
   confidence: 'high' | 'medium' | 'low';
@@ -193,6 +194,7 @@ export async function lookupSpotifyUri(
       youtubeId: null,
       appleMusicId: null,
       albumArt: null,
+      albumName: null,
       matchedTitle: title,
       matchedArtist: artist,
       confidence: 'low'
@@ -240,8 +242,9 @@ export async function lookupSpotifyUri(
     confidence = 'medium';
   }
 
-  // Get higher resolution album art
+  // Get higher resolution album art and album name
   const albumArt = itunesResult.artworkUrl100?.replace('100x100', '600x600') || null;
+  const albumName = itunesResult.collectionName || null;
 
   return {
     spotifyUri,
@@ -249,6 +252,7 @@ export async function lookupSpotifyUri(
     youtubeId,
     appleMusicId,
     albumArt,
+    albumName,
     matchedTitle: itunesResult.trackName,
     matchedArtist: itunesResult.artistName,
     confidence
@@ -311,6 +315,7 @@ export async function batchLookupSpotifyUris(
             youtubeId: null,
             appleMusicId: null,
             albumArt: null,
+            albumName: null,
             matchedTitle: song.title,
             matchedArtist: song.artist,
             confidence: 'low'
@@ -330,6 +335,7 @@ export async function batchLookupSpotifyUris(
           youtubeId: null,
           appleMusicId: null,
           albumArt: null,
+          albumName: null,
           matchedTitle: song.title,
           matchedArtist: song.artist,
           confidence: 'low'
