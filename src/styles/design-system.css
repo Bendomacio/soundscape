@@ -507,6 +507,21 @@
   animation: float 3s ease-in-out infinite;
 }
 
+@keyframes slideLeft {
+  from {
+    transform: translateX(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.35s ease-out;
+}
+
 /* ========================================
    MODERN BUTTON VARIANTS
    ======================================== */

@@ -345,7 +345,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
       padding: '20px',
       zIndex: 9999
     }}>
-      {/* Backdrop with blur */}
+      {/* Backdrop - darker with more blur */}
       <div
         onClick={onClose}
         style={{
@@ -354,14 +354,15 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.85)',
-          backdropFilter: 'blur(8px)'
+          background: 'rgba(0, 0, 0, 0.9)',
+          backdropFilter: 'blur(12px)'
         }}
       />
 
       {/* Container for main panel + sidebars */}
       <div
         onClick={e => e.stopPropagation()}
+        className="animate-scale-in"
         style={{
           display: 'flex',
           gap: '16px',
@@ -369,48 +370,45 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           position: 'relative'
         }}
       >
-        {/* Main Panel */}
+        {/* Main Panel - Glassmorphism */}
         <div
           ref={panelRef}
-          className="song-detail-panel"
+          className="song-detail-panel glass-dark"
           style={{
             position: 'relative',
             width: '100%',
             maxWidth: '420px',
             maxHeight: '90vh',
-            background: 'var(--color-dark-card)',
             borderRadius: '24px',
-            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7), 0 0 0 1px var(--glass-border)',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column'
           }}
         >
-        {/* Dynamic gradient header based on album colors */}
+        {/* Dynamic gradient header based on album colors - enhanced glow */}
         <div style={{
           position: 'relative',
           padding: '24px 24px 80px 24px',
-          background: `linear-gradient(180deg, ${dominantColor} 0%, var(--color-dark-card) 100%)`
+          background: `linear-gradient(180deg, ${dominantColor} 0%, transparent 100%)`
         }}>
-          {/* Close button */}
+          {/* Close button - glass style */}
           <button
             onClick={onClose}
+            className="btn-glass"
             style={{
               position: 'absolute',
               top: '16px',
               right: '16px',
-              width: '36px',
-              height: '36px',
-              background: 'rgba(0,0,0,0.3)',
-              backdropFilter: 'blur(10px)',
+              width: '40px',
+              height: '40px',
+              padding: 0,
               borderRadius: '50%',
-              border: 'none',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               color: 'white',
-              cursor: 'pointer',
-              transition: 'background 0.2s'
+              cursor: 'pointer'
             }}
             aria-label="Close"
           >
@@ -424,52 +422,60 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             height: '180px',
             margin: '20px auto 0',
           }}>
-            {/* Glow effect */}
+            {/* Glow effect - more vibrant */}
             <div style={{
               position: 'absolute',
-              inset: '-20px',
+              inset: '-30px',
               background: dominantColor,
-              filter: 'blur(40px)',
-              opacity: 0.6,
-              borderRadius: '50%'
+              filter: 'blur(50px)',
+              opacity: 0.7,
+              borderRadius: '50%',
+              animation: 'pulse 3s ease-in-out infinite'
             }} />
-            
-            {/* Album art */}
+
+            {/* Album art with glass border */}
             <div style={{
               position: 'relative',
               width: '100%',
               height: '100%',
-              borderRadius: '16px',
+              borderRadius: '20px',
               overflow: 'hidden',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.4)'
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.1)'
             }}>
-              <img 
+              <img
                 src={albumImgError ? FALLBACK_IMAGE : song.albumArt}
                 alt={song.album || song.title}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={() => setAlbumImgError(true)}
               />
-              
-              {/* Play button overlay */}
+
+              {/* Play button overlay - gradient style */}
               {trackId && (
                 <button
                   onClick={handlePlayPause}
+                  className={!isThisSongPlaying ? 'animate-pulse-glow' : ''}
                   style={{
                     position: 'absolute',
                     bottom: '12px',
                     right: '12px',
-                    width: '48px',
-                    height: '48px',
+                    width: '52px',
+                    height: '52px',
                     borderRadius: '50%',
-                    border: 'none',
-                    background: isThisSongPlaying ? 'white' : '#1DB954',
-                    color: isThisSongPlaying ? '#1DB954' : 'white',
+                    border: isThisSongPlaying ? '2px solid var(--color-primary)' : 'none',
+                    background: isThisSongPlaying
+                      ? 'rgba(255,255,255,0.1)'
+                      : 'linear-gradient(135deg, #1DB954 0%, #1ed760 100%)',
+                    backdropFilter: isThisSongPlaying ? 'blur(10px)' : 'none',
+                    color: isThisSongPlaying ? 'var(--color-primary)' : 'white',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
-                    transition: 'transform 0.2s, background 0.2s'
+                    boxShadow: isThisSongPlaying
+                      ? 'none'
+                      : '0 8px 24px rgba(29, 185, 84, 0.4)',
+                    transition: 'transform 0.2s, box-shadow 0.2s'
                   }}
                   onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
                   onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
@@ -541,106 +547,108 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             )}
           </div>
 
-          {/* Location card */}
-          <div style={{
+          {/* Location card - glass style */}
+          <div className="glass-light" style={{
             padding: '16px',
-            background: 'var(--color-dark-lighter)',
             borderRadius: '16px',
             marginBottom: '16px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)' }}>
-              <MapPin size={16} />
-              <span style={{ fontWeight: 600 }}>{song.locationName}</span>
-            </div>
-            {song.locationDescription && (
-              <p style={{ 
-                margin: '10px 0 0', 
-                fontSize: '14px', 
-                color: 'var(--color-text-muted)',
-                lineHeight: 1.5
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-primary)'
               }}>
-                {song.locationDescription}
-              </p>
-            )}
+                <MapPin size={18} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontWeight: 600, fontSize: '14px' }}>{song.locationName}</span>
+                {song.locationDescription && (
+                  <p style={{
+                    margin: '4px 0 0',
+                    fontSize: '13px',
+                    color: 'var(--color-text-muted)',
+                    lineHeight: 1.4
+                  }}>
+                    {song.locationDescription}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Tags */}
+          {/* Tags - badge style */}
           {song.tags && song.tags.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
               {song.tags.map(tag => (
-                <span 
+                <span
                   key={tag}
+                  className="badge"
                   style={{
                     padding: '6px 12px',
-                    background: 'var(--color-dark-lighter)',
-                    borderRadius: '20px',
-                    fontSize: '12px',
-                    color: 'var(--color-text-muted)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid var(--glass-border)'
                   }}
                 >
-                  <Tag size={12} />
+                  <Tag size={11} style={{ opacity: 0.7 }} />
                   {tag}
                 </span>
               ))}
             </div>
           )}
 
-          {/* Action buttons - pill style */}
+          {/* Action buttons - glass pill style */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '12px',
+            gap: '10px',
             padding: '16px 0',
-            borderTop: '1px solid var(--color-dark-lighter)',
-            borderBottom: '1px solid var(--color-dark-lighter)',
+            borderTop: '1px solid var(--glass-border)',
+            borderBottom: '1px solid var(--glass-border)',
             margin: '8px 0'
           }}>
             {/* Like button */}
             <button
               onClick={handleLike}
+              className="btn-glass"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '10px 20px',
-                background: liked ? 'rgba(239, 68, 68, 0.15)' : 'var(--color-dark-lighter)',
-                border: 'none',
-                borderRadius: '24px',
-                color: liked ? '#ef4444' : 'var(--color-text-muted)',
-                cursor: 'pointer',
-                fontWeight: 500,
-                fontSize: '14px',
-                transition: 'all 0.2s'
+                padding: '10px 18px',
+                background: liked ? 'rgba(244, 63, 94, 0.15)' : undefined,
+                borderColor: liked ? 'rgba(244, 63, 94, 0.3)' : undefined,
+                color: liked ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                cursor: 'pointer'
               }}
             >
               <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
-              <span>{likeCount}</span>
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{likeCount}</span>
             </button>
 
             {/* Share button */}
             <button
               onClick={handleShare}
+              className="btn-glass"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '10px 20px',
-                background: copied ? 'rgba(16, 185, 129, 0.15)' : 'var(--color-dark-lighter)',
-                border: 'none',
-                borderRadius: '24px',
+                padding: '10px 18px',
+                background: copied ? 'rgba(16, 185, 129, 0.15)' : undefined,
+                borderColor: copied ? 'rgba(16, 185, 129, 0.3)' : undefined,
                 color: copied ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                cursor: 'pointer',
-                fontWeight: 500,
-                fontSize: '14px',
-                transition: 'all 0.2s'
+                cursor: 'pointer'
               }}
             >
               <Share2 size={18} />
-              <span>{copied ? 'Copied!' : 'Share'}</span>
+              <span style={{ fontWeight: 600, fontSize: '13px' }}>{copied ? 'Copied!' : 'Share'}</span>
             </button>
 
             {/* Spotify link */}
@@ -649,23 +657,18 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                 href={`https://open.spotify.com/track/${trackId}`}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="btn-glass"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  padding: '10px 20px',
-                  background: 'var(--color-dark-lighter)',
-                  border: 'none',
-                  borderRadius: '24px',
+                  padding: '10px 18px',
                   color: '#1DB954',
-                  textDecoration: 'none',
-                  fontWeight: 500,
-                  fontSize: '14px',
-                  transition: 'all 0.2s'
+                  textDecoration: 'none'
                 }}
               >
                 <ExternalLink size={18} />
-                <span>Spotify</span>
+                <span style={{ fontWeight: 600, fontSize: '13px' }}>Spotify</span>
               </a>
             )}
           </div>
@@ -703,41 +706,25 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             </div>
           )}
 
-          {/* Tabs */}
-          <div style={{
-            display: 'flex',
-            gap: '4px',
-            marginTop: '20px',
-            padding: '4px',
-            background: 'var(--color-dark-lighter)',
-            borderRadius: '12px'
-          }}>
+          {/* Tabs - toggle group style */}
+          <div className="toggle-group" style={{ marginTop: '20px' }}>
             {[
-              { id: 'info' as const, label: 'Info', icon: Music },
+              { id: 'info' as const, label: 'Info', icon: Compass },
               { id: 'comments' as const, label: 'Comments', icon: MessageCircle },
               { id: 'photos' as const, label: 'Photos', icon: Camera }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                className={`toggle-item ${activeTab === tab.id ? 'active' : ''}`}
                 style={{
-                  flex: 1,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px',
-                  padding: '10px',
-                  background: activeTab === tab.id ? 'var(--color-dark-card)' : 'transparent',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: activeTab === tab.id ? 'white' : 'var(--color-text-muted)',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  gap: '6px'
                 }}
               >
-                <tab.icon size={16} />
+                <tab.icon size={15} />
                 {tab.label}
               </button>
             ))}
@@ -748,22 +735,23 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             {/* Info Tab - Mini map and navigation */}
             {activeTab === 'info' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Map Preview - Show directions on mobile with user location */}
-                <div style={{
+                {/* Map Preview - glass card */}
+                <div className="glass-light" style={{
                   position: 'relative',
-                  borderRadius: '12px',
+                  borderRadius: '16px',
                   overflow: 'hidden',
-                  background: 'var(--color-dark-lighter)'
+                  padding: '4px'
                 }}>
                   {isMobile() && userLocation ? (
-                    // Mobile: Embedded Google Maps with directions route (no API key needed)
+                    // Mobile: Embedded Google Maps with directions route
                     <iframe
                       src={`https://www.google.com/maps?saddr=${userLocation.latitude},${userLocation.longitude}&daddr=${song.latitude},${song.longitude}&dirflg=w&output=embed`}
                       style={{
                         width: '100%',
                         height: '200px',
                         border: 'none',
-                        display: 'block'
+                        display: 'block',
+                        borderRadius: '12px'
                       }}
                       allowFullScreen
                       loading="lazy"
@@ -771,40 +759,41 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                     />
                   ) : (
                     // Desktop: Static Mapbox map
-                    <>
+                    <div style={{ position: 'relative' }}>
                       <img
                         src={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+10b981(${song.longitude},${song.latitude})/${song.longitude},${song.latitude},15,0/400x200@2x?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`}
                         alt={`Map of ${song.locationName}`}
                         style={{
                           width: '100%',
-                          height: '150px',
+                          height: '160px',
                           objectFit: 'cover',
-                          display: 'block'
+                          display: 'block',
+                          borderRadius: '12px'
                         }}
                       />
-                      {/* Coordinates overlay */}
-                      <div style={{
+                      {/* Coordinates overlay - glass style */}
+                      <div className="glass" style={{
                         position: 'absolute',
                         bottom: '8px',
                         left: '8px',
-                        background: 'rgba(0,0,0,0.7)',
-                        padding: '4px 8px',
-                        borderRadius: '6px',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
                         fontSize: '11px',
                         color: 'var(--color-text-muted)',
                         fontFamily: 'monospace'
                       }}>
                         {song.latitude.toFixed(5)}, {song.longitude.toFixed(5)}
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
 
-                {/* Action Buttons */}
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {/* Get Directions - opens full Google Maps */}
+                {/* Action Buttons - gradient and glass */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {/* Get Directions - gradient button */}
                   <button
                     onClick={handleGetDirections}
+                    className="btn-gradient"
                     style={{
                       flex: 1,
                       display: 'flex',
@@ -812,37 +801,32 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                       justifyContent: 'center',
                       gap: '8px',
                       padding: '14px 16px',
-                      background: 'var(--color-primary)',
-                      border: 'none',
+                      background: 'var(--gradient-primary)',
                       borderRadius: '12px',
                       color: 'white',
                       fontSize: '14px',
                       fontWeight: 600,
                       cursor: 'pointer',
-                      transition: 'opacity 0.2s'
+                      boxShadow: 'var(--shadow-glow-primary)'
                     }}
                   >
                     <Navigation size={18} />
                     {isMobile() ? 'Open in Maps' : 'Get Directions'}
                   </button>
 
-                  {/* Street View */}
+                  {/* Street View - glass button */}
                   <button
                     onClick={handleOpenStreetView}
+                    className="btn-glass"
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '8px',
                       padding: '14px 16px',
-                      background: 'var(--color-dark-lighter)',
-                      border: 'none',
-                      borderRadius: '12px',
-                      color: 'var(--color-text)',
                       fontSize: '14px',
                       fontWeight: 500,
-                      cursor: 'pointer',
-                      transition: 'background 0.2s'
+                      cursor: 'pointer'
                     }}
                   >
                     <Eye size={18} />
@@ -850,13 +834,13 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                   </button>
                 </div>
 
-                {/* Location tip */}
+                {/* Location tip - subtle */}
                 <p style={{
                   fontSize: '12px',
                   color: 'var(--color-text-muted)',
                   textAlign: 'center',
                   margin: 0,
-                  opacity: 0.7
+                  opacity: 0.6
                 }}>
                   {isMobile() && userLocation
                     ? 'Route shown from your current location'
@@ -868,21 +852,20 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             {/* Comments Tab */}
             {activeTab === 'comments' && (
               <div>
-                {/* Add comment input */}
+                {/* Add comment input - glass style */}
                 {user ? (
-                  <div style={{
+                  <div className="glass-light" style={{
                     display: 'flex',
-                    gap: '8px',
+                    gap: '10px',
                     marginBottom: '16px',
                     padding: '12px',
-                    background: 'var(--color-dark-lighter)',
-                    borderRadius: '12px'
+                    borderRadius: '14px'
                   }}>
                     <UserAvatar
                       avatarUrl={profile?.avatar_url}
                       displayName={profile?.display_name}
                       email={user.email}
-                      size={32}
+                      size={36}
                     />
                     <input
                       type="text"
@@ -890,10 +873,13 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                       onChange={(e) => setNewComment(e.target.value)}
                       placeholder="Add a comment..."
                       maxLength={500}
+                      className="input-glass"
                       style={{
                         flex: 1,
-                        background: 'transparent',
-                        border: 'none',
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '10px',
+                        padding: '8px 12px',
                         color: 'white',
                         fontSize: '14px',
                         outline: 'none'
@@ -904,16 +890,17 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                       onClick={handleSubmitComment}
                       disabled={!newComment.trim() || isSubmittingComment}
                       style={{
-                        background: newComment.trim() ? 'var(--color-primary)' : 'transparent',
+                        background: newComment.trim() ? 'var(--gradient-primary)' : 'rgba(255,255,255,0.05)',
                         border: 'none',
-                        borderRadius: '50%',
-                        width: '32px',
-                        height: '32px',
+                        borderRadius: '10px',
+                        width: '36px',
+                        height: '36px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         cursor: newComment.trim() ? 'pointer' : 'default',
                         color: newComment.trim() ? 'white' : 'var(--color-text-muted)',
+                        boxShadow: newComment.trim() ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
                         transition: 'all 0.2s'
                       }}
                     >
@@ -921,14 +908,13 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                     </button>
                   </div>
                 ) : (
-                  <div style={{
-                    padding: '16px',
-                    background: 'var(--color-dark-lighter)',
-                    borderRadius: '12px',
+                  <div className="glass-light" style={{
+                    padding: '20px',
+                    borderRadius: '14px',
                     textAlign: 'center',
                     marginBottom: '16px'
                   }}>
-                    <p style={{ color: 'var(--color-text-muted)', fontSize: '14px' }}>
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', margin: 0 }}>
                       Sign in to leave a comment
                     </p>
                   </div>
@@ -936,54 +922,56 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
 
                 {/* Comments list */}
                 {loadingComments ? (
-                  <div style={{ textAlign: 'center', padding: '20px' }}>
-                    <LoadingSpinner size={24} style={{ color: 'var(--color-text-muted)' }} />
+                  <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <LoadingSpinner size={24} className="text-[var(--color-text-muted)]" />
                   </div>
                 ) : comments.length === 0 ? (
                   <EmptyState icon={MessageCircle} message="No comments yet. Be the first!" />
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {comments.map(comment => (
                       <div
                         key={comment.id}
+                        className="glass-light"
                         style={{
                           display: 'flex',
-                          gap: '10px',
-                          padding: '12px',
-                          background: 'var(--color-dark-lighter)',
-                          borderRadius: '12px'
+                          gap: '12px',
+                          padding: '14px',
+                          borderRadius: '14px'
                         }}
                       >
                         <UserAvatar
                           avatarUrl={comment.userAvatarUrl}
-                          size={32}
-                          bgColor="var(--color-dark-card)"
+                          size={36}
+                          bgColor="rgba(255,255,255,0.05)"
                           showFallbackIcon
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                             <span style={{ fontWeight: 600, fontSize: '13px' }}>{comment.userDisplayName}</span>
-                            <span style={{ color: 'var(--color-text-muted)', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Clock size={10} />
+                            <span className="badge" style={{
+                              padding: '2px 8px',
+                              fontSize: '10px',
+                              background: 'rgba(255,255,255,0.05)',
+                              gap: '4px'
+                            }}>
+                              <Clock size={9} />
                               {formatTimeAgo(comment.createdAt)}
                             </span>
                           </div>
-                          <p style={{ fontSize: '14px', margin: 0, wordBreak: 'break-word' }}>{comment.content}</p>
+                          <p style={{ fontSize: '14px', margin: 0, wordBreak: 'break-word', lineHeight: 1.5 }}>{comment.content}</p>
                         </div>
                         {user?.id === comment.userId && (
                           <button
                             onClick={() => handleDeleteComment(comment.id)}
+                            className="btn-glass"
                             style={{
-                              background: 'none',
-                              border: 'none',
+                              padding: '6px',
                               color: 'var(--color-text-muted)',
-                              cursor: 'pointer',
-                              padding: '4px',
-                              opacity: 0.5,
-                              transition: 'opacity 0.2s'
+                              opacity: 0.6
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.5'}
+                            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.color = 'var(--color-accent)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
                           >
                             <Trash2 size={14} />
                           </button>
@@ -998,12 +986,11 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             {/* Photos Tab */}
             {activeTab === 'photos' && (
               <div>
-                {/* Upload photo */}
+                {/* Upload photo - glass dashed border */}
                 {user && (
-                  <div style={{
+                  <div className="glass-light" style={{
                     padding: '16px',
-                    background: 'var(--color-dark-lighter)',
-                    borderRadius: '12px',
+                    borderRadius: '14px',
                     marginBottom: '16px'
                   }}>
                     <input
@@ -1021,29 +1008,31 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '8px',
-                        padding: '12px',
-                        background: 'var(--color-dark-card)',
-                        border: '2px dashed var(--color-dark-lighter)',
-                        borderRadius: '8px',
+                        gap: '10px',
+                        padding: '16px',
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '2px dashed rgba(255,255,255,0.1)',
+                        borderRadius: '12px',
                         color: 'var(--color-text-muted)',
                         cursor: 'pointer',
                         fontSize: '14px',
                         transition: 'all 0.2s'
                       }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = 'var(--color-text-muted)'; }}
                     >
                       {isUploadingPhoto ? (
                         <><LoadingSpinner size={18} /> Uploading...</>
                       ) : (
-                        <><Camera size={18} /> Share a photo from this location</>
+                        <><Camera size={20} /> Share a photo from this location</>
                       )}
                     </button>
-                    <p style={{ 
-                      fontSize: '11px', 
-                      color: 'var(--color-text-muted)', 
+                    <p style={{
+                      fontSize: '11px',
+                      color: 'var(--color-text-muted)',
                       textAlign: 'center',
-                      marginTop: '8px',
-                      opacity: 0.7
+                      marginTop: '10px',
+                      opacity: 0.6
                     }}>
                       Photos require admin approval before appearing
                     </p>
@@ -1052,30 +1041,30 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
 
                 {/* Photos grid */}
                 {loadingPhotos ? (
-                  <div style={{ textAlign: 'center', padding: '20px' }}>
-                    <LoadingSpinner size={24} style={{ color: 'var(--color-text-muted)' }} />
+                  <div style={{ textAlign: 'center', padding: '24px' }}>
+                    <LoadingSpinner size={24} className="text-[var(--color-text-muted)]" />
                   </div>
                 ) : photos.length === 0 ? (
                   <EmptyState icon={ImageIcon} message="No photos yet. Be the first to share!" />
                 ) : (
-                  <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(2, 1fr)', 
-                    gap: '8px' 
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '10px'
                   }}>
                     {photos.map(photo => (
-                      <div 
+                      <div
                         key={photo.id}
+                        className="glass-light"
                         style={{
                           position: 'relative',
                           paddingBottom: '100%',
-                          borderRadius: '12px',
-                          overflow: 'hidden',
-                          background: 'var(--color-dark-lighter)'
+                          borderRadius: '14px',
+                          overflow: 'hidden'
                         }}
                       >
-                        <img 
-                          src={photo.photoUrl} 
+                        <img
+                          src={photo.photoUrl}
                           alt={photo.caption || 'User photo'}
                           style={{
                             position: 'absolute',
@@ -1087,17 +1076,14 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                           }}
                         />
                         {!photo.approved && photo.userId === user?.id && (
-                          <div style={{
+                          <div className="badge badge-amber" style={{
                             position: 'absolute',
                             top: '8px',
                             left: '8px',
-                            background: 'rgba(0,0,0,0.7)',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            color: 'var(--color-accent)'
+                            padding: '4px 10px',
+                            fontSize: '10px'
                           }}>
-                            Pending approval
+                            Pending
                           </div>
                         )}
                         <div style={{
@@ -1105,11 +1091,15 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                           bottom: 0,
                           left: 0,
                           right: 0,
-                          padding: '8px',
-                          background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
-                          fontSize: '11px'
+                          padding: '10px 12px',
+                          background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
+                          fontSize: '11px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
                         }}>
-                          <span style={{ opacity: 0.8 }}>📸 {photo.userDisplayName}</span>
+                          <Camera size={10} style={{ opacity: 0.7 }} />
+                          <span style={{ opacity: 0.9 }}>{photo.userDisplayName}</span>
                         </div>
                       </div>
                     ))}
@@ -1121,67 +1111,82 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
         </div>
         </div>
 
-        {/* Sidebar panels - Desktop only */}
+        {/* Sidebar panels - Desktop only - Glassmorphism */}
         {isDesktop && (nearbySongs.length > 0 || relatedSongs.length > 0) && (
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            width: '280px',
-            maxHeight: '90vh',
-            flexShrink: 0
-          }}>
-            {/* Songs Nearby Panel */}
+          <div
+            className="animate-slide-left"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+              width: '300px',
+              maxHeight: '90vh',
+              flexShrink: 0
+            }}
+          >
+            {/* Songs Nearby Panel - Glass card with gradient accent */}
             {nearbySongs.length > 0 && (
-              <div style={{
-                background: 'var(--color-dark-card)',
-                borderRadius: '16px',
-                border: '1px solid var(--color-primary)',
+              <div className="card-glass" style={{
                 overflow: 'hidden',
                 maxHeight: 'calc(45vh - 8px)'
               }}>
+                {/* Header with icon */}
                 <div style={{
                   padding: '16px',
-                  borderBottom: '1px solid var(--color-dark-lighter)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'white'
+                  borderBottom: '1px solid var(--glass-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
                 }}>
-                  Songs Nearby
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Compass size={16} style={{ color: 'var(--color-primary)' }} />
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Songs Nearby</span>
+                  <span className="badge badge-primary" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: '10px' }}>
+                    {nearbySongs.length}
+                  </span>
                 </div>
                 <div style={{
-                  padding: '12px',
+                  padding: '10px',
                   overflowY: 'auto',
-                  maxHeight: 'calc(45vh - 60px)',
+                  maxHeight: 'calc(45vh - 70px)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px'
+                  gap: '6px'
                 }}>
                   {nearbySongs.map(nearbySong => (
                     <button
                       key={nearbySong.id}
                       onClick={() => onSongSelect?.(nearbySong)}
+                      className="glass-light"
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '10px',
+                        gap: '12px',
                         padding: '10px',
-                        background: 'var(--color-dark-lighter)',
                         border: 'none',
-                        borderRadius: '10px',
+                        borderRadius: '12px',
                         cursor: 'pointer',
                         textAlign: 'left',
                         width: '100%',
-                        transition: 'background 0.2s'
+                        transition: 'all 0.2s'
                       }}
                     >
                       <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '6px',
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '10px',
                         overflow: 'hidden',
                         flexShrink: 0,
-                        background: 'var(--color-dark-card)'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
                       }}>
                         {nearbySong.albumArt ? (
                           <img
@@ -1195,15 +1200,16 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                             height: '100%',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            background: 'rgba(255,255,255,0.05)'
                           }}>
-                            <Music size={16} color="var(--color-text-muted)" />
+                            <Music size={18} color="var(--color-text-muted)" />
                           </div>
                         )}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
-                          fontWeight: 500,
+                          fontWeight: 600,
                           fontSize: '13px',
                           color: 'white',
                           overflow: 'hidden',
@@ -1222,71 +1228,83 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                           {nearbySong.artist}
                         </div>
                       </div>
-                      <div style={{
-                        fontSize: '11px',
-                        color: 'var(--color-primary)',
-                        fontWeight: 500,
+                      <span className="badge badge-primary" style={{
+                        padding: '4px 10px',
+                        fontSize: '10px',
+                        fontWeight: 600,
                         flexShrink: 0
                       }}>
                         {formatDistance(nearbySong.distance)}
-                      </div>
+                      </span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Related Songs Panel */}
+            {/* Related Songs Panel - Glass card with purple accent */}
             {relatedSongs.length > 0 && (
-              <div style={{
-                background: 'var(--color-dark-card)',
-                borderRadius: '16px',
-                border: '1px solid var(--color-primary)',
+              <div className="card-glass" style={{
                 overflow: 'hidden',
                 maxHeight: 'calc(45vh - 8px)'
               }}>
+                {/* Header with icon */}
                 <div style={{
                   padding: '16px',
-                  borderBottom: '1px solid var(--color-dark-lighter)',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'white'
+                  borderBottom: '1px solid var(--glass-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
                 }}>
-                  Related Songs
+                  <div style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <Users size={16} style={{ color: '#8B5CF6' }} />
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>More by {song.artist}</span>
+                  <span className="badge badge-purple" style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: '10px' }}>
+                    {relatedSongs.length}
+                  </span>
                 </div>
                 <div style={{
-                  padding: '12px',
+                  padding: '10px',
                   overflowY: 'auto',
-                  maxHeight: 'calc(45vh - 60px)',
+                  maxHeight: 'calc(45vh - 70px)',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px'
+                  gap: '6px'
                 }}>
                   {relatedSongs.map(relatedSong => (
                     <button
                       key={relatedSong.id}
                       onClick={() => onSongSelect?.(relatedSong)}
+                      className="glass-light"
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '10px',
+                        gap: '12px',
                         padding: '10px',
-                        background: 'var(--color-dark-lighter)',
                         border: 'none',
-                        borderRadius: '10px',
+                        borderRadius: '12px',
                         cursor: 'pointer',
                         textAlign: 'left',
                         width: '100%',
-                        transition: 'background 0.2s'
+                        transition: 'all 0.2s'
                       }}
                     >
                       <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '6px',
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '10px',
                         overflow: 'hidden',
                         flexShrink: 0,
-                        background: 'var(--color-dark-card)'
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
                       }}>
                         {relatedSong.albumArt ? (
                           <img
@@ -1300,15 +1318,16 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                             height: '100%',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            background: 'rgba(255,255,255,0.05)'
                           }}>
-                            <Music size={16} color="var(--color-text-muted)" />
+                            <Music size={18} color="var(--color-text-muted)" />
                           </div>
                         )}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{
-                          fontWeight: 500,
+                          fontWeight: 600,
                           fontSize: '13px',
                           color: 'white',
                           overflow: 'hidden',
@@ -1322,12 +1341,15 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                           color: 'var(--color-text-muted)',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                          whiteSpace: 'nowrap',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
                         }}>
+                          <MapPin size={10} />
                           {relatedSong.locationName}
                         </div>
                       </div>
-                      <MapPin size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
                     </button>
                   ))}
                 </div>
