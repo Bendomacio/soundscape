@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X,
   Search,
@@ -19,15 +19,20 @@ import {
   Send,
   RefreshCw,
   User,
-  Link2
+  Link2,
+  Download,
+  Upload,
+  FileText,
+  Zap
 } from 'lucide-react';
 import { SpotifySearch } from './SpotifySearch';
 import type { SongLocation, SongPhoto, SongStatus, MusicProvider, ProviderLinks } from '../types';
 import type { SpotifyTrack } from '../lib/spotify';
 import { getTrackInfo } from '../lib/spotify';
 import { getPendingPhotos, approvePhoto, rejectPhoto } from '../lib/comments';
-import { setSongStatus, fetchAllSongsAdmin } from '../lib/songs';
+import { setSongStatus, fetchAllSongsAdmin, addSong } from '../lib/songs';
 import { detectProvider, extractProviderId } from '../lib/providers';
+import { batchLookupSpotifyUris, type LookupProgress, type SpotifyLookupResult } from '../lib/spotifyLookup';
 
 // Provider display config
 const PROVIDER_CONFIG: Record<MusicProvider, { name: string; color: string; placeholder: string }> = {
@@ -68,7 +73,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
   const [showSpotifySearch, setShowSpotifySearch] = useState(false);
   const [showProviderEditor, setShowProviderEditor] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'songs' | 'review' | 'photos'>('songs');
+  const [activeTab, setActiveTab] = useState<'songs' | 'review' | 'photos' | 'import'>('songs');
   const [pendingPhotos, setPendingPhotos] = useState<SongPhoto[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState<string | null>(null);
@@ -93,6 +98,15 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
   const [editNotesFor, setEditNotesFor] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+
+  // Import tab state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importedSongs, setImportedSongs] = useState<Array<Partial<SongLocation> & { _importId: string; _duplicate?: boolean; _duplicateOf?: string }>>([]);
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'fetching' | 'ready'>('upload');
+  const [lookupProgress, setLookupProgress] = useState<LookupProgress | null>(null);
+  const [lookupResults, setLookupResults] = useState<Map<string, SpotifyLookupResult>>(new Map());
+  const [importing, setImporting] = useState(false);
+  const [importResults, setImportResults] = useState<{ success: number; failed: number } | null>(null);
 
   // Load all songs for review tab
   useEffect(() => {
@@ -442,6 +456,25 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                 {pendingPhotos.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab('import')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: activeTab === 'import' ? 'var(--color-dark-lighter)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              color: activeTab === 'import' ? 'white' : 'var(--color-text-muted)',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
+          >
+            <Upload size={16} />
+            Import
           </button>
         </div>
 
@@ -976,7 +1009,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {pendingPhotos.map(photo => (
-                <div 
+                <div
                   key={photo.id}
                   style={{
                     display: 'flex',
@@ -995,7 +1028,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                     flexShrink: 0,
                     background: 'var(--color-dark-card)'
                   }}>
-                    <img 
+                    <img
                       src={photo.photoUrl}
                       alt="Pending photo"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -1068,6 +1101,631 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
               ))}
             </div>
           )}
+        </div>
+        )}
+
+        {/* Import tab */}
+        {activeTab === 'import' && (
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 24px'
+        }}>
+          {/* Export section */}
+          <div style={{
+            padding: '16px',
+            background: 'var(--color-dark-lighter)',
+            borderRadius: '12px',
+            marginBottom: '16px'
+          }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 8px 0' }}>Export Songs</h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 12px 0' }}>
+              Download all songs as CSV for backup or editing
+            </p>
+            <button
+              onClick={() => {
+                // Generate CSV
+                const headers = ['id', 'title', 'artist', 'album', 'spotify_uri', 'youtube_id', 'apple_music_id', 'soundcloud_url', 'latitude', 'longitude', 'location_name', 'location_description', 'tags', 'status'];
+                const rows = songs.map(s => [
+                  s.id,
+                  `"${(s.title || '').replace(/"/g, '""')}"`,
+                  `"${(s.artist || '').replace(/"/g, '""')}"`,
+                  `"${(s.album || '').replace(/"/g, '""')}"`,
+                  s.spotifyUri || '',
+                  s.providerLinks?.youtube || '',
+                  s.providerLinks?.appleMusic || '',
+                  s.providerLinks?.soundcloud || '',
+                  s.latitude,
+                  s.longitude,
+                  `"${(s.locationName || '').replace(/"/g, '""')}"`,
+                  `"${(s.locationDescription || '').replace(/"/g, '""')}"`,
+                  `"${(s.tags || []).join(',')}"`,
+                  s.status || 'live'
+                ].join(','));
+                const csv = [headers.join(','), ...rows].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `soundscape_songs_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: 'var(--color-primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              <Download size={16} />
+              Export CSV
+            </button>
+          </div>
+
+          {/* Import section */}
+          <div style={{
+            padding: '16px',
+            background: 'var(--color-dark-lighter)',
+            borderRadius: '12px'
+          }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 8px 0' }}>Import Songs</h3>
+            <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 12px 0' }}>
+              Upload a CSV file to import new songs. Required columns: title, artist, latitude, longitude, location_name
+            </p>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  const text = event.target?.result as string;
+                  if (!text) return;
+
+                  // Parse CSV
+                  const lines = text.split('\n');
+                  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+
+                  const parsed: Array<Partial<SongLocation> & { _importId: string; _duplicate?: boolean; _duplicateOf?: string }> = [];
+
+                  for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    // Parse CSV line with quoted fields
+                    const values: string[] = [];
+                    let current = '';
+                    let inQuotes = false;
+                    for (let j = 0; j < line.length; j++) {
+                      const char = line[j];
+                      if (char === '"' && !inQuotes) {
+                        inQuotes = true;
+                      } else if (char === '"' && inQuotes) {
+                        if (line[j + 1] === '"') {
+                          current += '"';
+                          j++;
+                        } else {
+                          inQuotes = false;
+                        }
+                      } else if (char === ',' && !inQuotes) {
+                        values.push(current);
+                        current = '';
+                      } else {
+                        current += char;
+                      }
+                    }
+                    values.push(current);
+
+                    // Map to SongLocation
+                    const row: Record<string, string> = {};
+                    headers.forEach((h, idx) => {
+                      row[h] = values[idx] || '';
+                    });
+
+                    if (!row.title || !row.artist) continue;
+
+                    const song: Partial<SongLocation> & { _importId: string } = {
+                      _importId: `import-${i}-${Date.now()}`,
+                      title: row.title,
+                      artist: row.artist,
+                      album: row.album || undefined,
+                      spotifyUri: row.spotify_uri || row.spotifyuri || undefined,
+                      latitude: parseFloat(row.latitude) || 0,
+                      longitude: parseFloat(row.longitude) || 0,
+                      locationName: row.location_name || row.locationname || '',
+                      locationDescription: row.location_description || row.locationdescription || undefined,
+                      tags: row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+                      providerLinks: {
+                        youtube: row.youtube_id || row.youtubeid || undefined,
+                        appleMusic: row.apple_music_id || row.applemusicid || undefined,
+                        soundcloud: row.soundcloud_url || row.soundcloudurl || undefined
+                      }
+                    };
+
+                    // Check for duplicates (by title + artist, case insensitive)
+                    const normalizedTitle = song.title?.toLowerCase().trim();
+                    const normalizedArtist = song.artist?.toLowerCase().trim();
+                    const duplicate = songs.find(s =>
+                      s.title.toLowerCase().trim() === normalizedTitle &&
+                      s.artist.toLowerCase().trim() === normalizedArtist
+                    );
+
+                    if (duplicate) {
+                      (song as typeof song & { _duplicate: boolean; _duplicateOf: string })._duplicate = true;
+                      (song as typeof song & { _duplicateOf: string })._duplicateOf = duplicate.id;
+                    }
+
+                    parsed.push(song);
+                  }
+
+                  setImportedSongs(parsed);
+                  setImportStep('preview');
+                  setLookupResults(new Map());
+                  setImportResults(null);
+                };
+                reader.readAsText(file);
+                e.target.value = ''; // Reset input
+              }}
+            />
+
+            {importStep === 'upload' && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 20px',
+                  background: 'var(--color-dark-card)',
+                  color: 'var(--color-text)',
+                  border: '2px dashed var(--color-dark-lighter)',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  width: '100%',
+                  justifyContent: 'center'
+                }}
+              >
+                <FileText size={16} />
+                Select CSV File
+              </button>
+            )}
+
+            {importStep === 'preview' && (
+              <div>
+                {/* Stats */}
+                <div style={{
+                  display: 'flex',
+                  gap: '16px',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--color-dark-card)',
+                    borderRadius: '8px',
+                    flex: 1,
+                    minWidth: '120px'
+                  }}>
+                    <div style={{ fontSize: '24px', fontWeight: 700 }}>{importedSongs.length}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Total songs</div>
+                  </div>
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--color-dark-card)',
+                    borderRadius: '8px',
+                    flex: 1,
+                    minWidth: '120px'
+                  }}>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>
+                      {importedSongs.filter(s => s._duplicate).length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Duplicates</div>
+                  </div>
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--color-dark-card)',
+                    borderRadius: '8px',
+                    flex: 1,
+                    minWidth: '120px'
+                  }}>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#ef4444' }}>
+                      {importedSongs.filter(s => !s.spotifyUri && !s._duplicate).length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Missing Spotify</div>
+                  </div>
+                </div>
+
+                {/* Preview list */}
+                <div style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  marginBottom: '16px',
+                  border: '1px solid var(--color-dark-card)',
+                  borderRadius: '8px'
+                }}>
+                  {importedSongs.map((song, idx) => (
+                    <div
+                      key={song._importId}
+                      style={{
+                        padding: '12px',
+                        borderBottom: idx < importedSongs.length - 1 ? '1px solid var(--color-dark-card)' : 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        background: song._duplicate ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: '14px' }}>{song.title}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>{song.artist}</div>
+                      </div>
+                      {song._duplicate && (
+                        <span style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          background: 'rgba(245, 158, 11, 0.2)',
+                          color: '#f59e0b',
+                          borderRadius: '4px'
+                        }}>
+                          Duplicate
+                        </span>
+                      )}
+                      {song.spotifyUri ? (
+                        <Check size={16} color="#1DB954" />
+                      ) : lookupResults.get(song._importId)?.spotifyUri ? (
+                        <Check size={16} color="#1DB954" />
+                      ) : (
+                        <AlertCircle size={16} color="#ef4444" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      setImportStep('upload');
+                      setImportedSongs([]);
+                      setLookupResults(new Map());
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'var(--color-dark-card)',
+                      color: 'var(--color-text)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      // Find songs missing Spotify URIs (excluding duplicates)
+                      const needsLookup = importedSongs.filter(s => !s.spotifyUri && !s._duplicate);
+                      if (needsLookup.length === 0) {
+                        setImportStep('ready');
+                        return;
+                      }
+
+                      setImportStep('fetching');
+
+                      const results = await batchLookupSpotifyUris(
+                        needsLookup.map(s => ({
+                          id: s._importId,
+                          title: s.title || '',
+                          artist: s.artist || ''
+                        })),
+                        setLookupProgress,
+                        1500
+                      );
+
+                      setLookupResults(results);
+                      setLookupProgress(null);
+                      setImportStep('ready');
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 20px',
+                      background: '#1DB954',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Zap size={16} />
+                    Fetch Spotify URIs ({importedSongs.filter(s => !s.spotifyUri && !s._duplicate).length})
+                  </button>
+                  <button
+                    onClick={() => setImportStep('ready')}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'var(--color-primary)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Skip to Import
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {importStep === 'fetching' && (
+              <div style={{ textAlign: 'center', padding: '32px' }}>
+                <Loader size={32} className="animate-spin" style={{ color: '#1DB954', margin: '0 auto 16px' }} />
+                {lookupProgress && (
+                  <>
+                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>
+                      Looking up: {lookupProgress.songTitle}
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                      {lookupProgress.current} / {lookupProgress.total}
+                    </div>
+                    <div style={{
+                      width: '100%',
+                      height: '4px',
+                      background: 'var(--color-dark-card)',
+                      borderRadius: '2px',
+                      marginTop: '12px',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        width: `${(lookupProgress.current / lookupProgress.total) * 100}%`,
+                        height: '100%',
+                        background: '#1DB954',
+                        transition: 'width 0.3s'
+                      }} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {importStep === 'ready' && (
+              <div>
+                {/* Results summary */}
+                <div style={{
+                  display: 'flex',
+                  gap: '16px',
+                  marginBottom: '16px',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--color-dark-card)',
+                    borderRadius: '8px',
+                    flex: 1,
+                    minWidth: '120px'
+                  }}>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#10b981' }}>
+                      {importedSongs.filter(s => !s._duplicate && (s.spotifyUri || lookupResults.get(s._importId)?.spotifyUri)).length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Ready to import</div>
+                  </div>
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--color-dark-card)',
+                    borderRadius: '8px',
+                    flex: 1,
+                    minWidth: '120px'
+                  }}>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>
+                      {importedSongs.filter(s => s._duplicate).length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Skipped (duplicates)</div>
+                  </div>
+                </div>
+
+                {/* Preview with lookup results */}
+                <div style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  marginBottom: '16px',
+                  border: '1px solid var(--color-dark-card)',
+                  borderRadius: '8px'
+                }}>
+                  {importedSongs.filter(s => !s._duplicate).map((song, idx, arr) => {
+                    const lookup = lookupResults.get(song._importId);
+                    const hasSpotify = song.spotifyUri || lookup?.spotifyUri;
+                    return (
+                      <div
+                        key={song._importId}
+                        style={{
+                          padding: '12px',
+                          borderBottom: idx < arr.length - 1 ? '1px solid var(--color-dark-card)' : 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px'
+                        }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 500, fontSize: '14px' }}>{song.title}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                            {song.artist}
+                            {lookup && lookup.matchedArtist !== song.artist && (
+                              <span style={{ color: '#f59e0b' }}> → {lookup.matchedArtist}</span>
+                            )}
+                          </div>
+                        </div>
+                        {hasSpotify ? (
+                          <span style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '11px',
+                            padding: '2px 8px',
+                            background: 'rgba(29, 185, 84, 0.2)',
+                            color: '#1DB954',
+                            borderRadius: '4px'
+                          }}>
+                            <Check size={12} />
+                            Spotify
+                          </span>
+                        ) : (
+                          <span style={{
+                            fontSize: '11px',
+                            padding: '2px 8px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            color: '#ef4444',
+                            borderRadius: '4px'
+                          }}>
+                            No Spotify
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Import results */}
+                {importResults && (
+                  <div style={{
+                    padding: '16px',
+                    background: importResults.failed > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                    borderRadius: '8px',
+                    marginBottom: '16px'
+                  }}>
+                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                      Import Complete
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                      {importResults.success} songs imported successfully
+                      {importResults.failed > 0 && `, ${importResults.failed} failed`}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      setImportStep('upload');
+                      setImportedSongs([]);
+                      setLookupResults(new Map());
+                      setImportResults(null);
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'var(--color-dark-card)',
+                      color: 'var(--color-text)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Start Over
+                  </button>
+                  {!importResults && (
+                    <button
+                      onClick={async () => {
+                        setImporting(true);
+                        let success = 0;
+                        let failed = 0;
+
+                        const toImport = importedSongs.filter(s => !s._duplicate);
+
+                        for (const song of toImport) {
+                          const lookup = lookupResults.get(song._importId);
+
+                          // Build the full song object
+                          const fullSong: SongLocation = {
+                            id: `user-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+                            title: song.title || '',
+                            artist: song.artist || '',
+                            album: song.album,
+                            albumArt: lookup?.albumArt || '',
+                            spotifyUri: song.spotifyUri || lookup?.spotifyUri || undefined,
+                            latitude: song.latitude || 0,
+                            longitude: song.longitude || 0,
+                            locationName: song.locationName || '',
+                            locationDescription: song.locationDescription,
+                            upvotes: 0,
+                            verified: true,
+                            tags: song.tags,
+                            status: 'live',
+                            providerLinks: {
+                              ...song.providerLinks,
+                              youtube: song.providerLinks?.youtube || lookup?.youtubeId || undefined,
+                              appleMusic: song.providerLinks?.appleMusic || lookup?.appleMusicId || undefined
+                            }
+                          };
+
+                          const result = await addSong(fullSong);
+                          if (result) {
+                            success++;
+                          } else {
+                            failed++;
+                          }
+                        }
+
+                        setImportResults({ success, failed });
+                        setImporting(false);
+                        onRefreshSongs?.();
+                      }}
+                      disabled={importing}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '10px 20px',
+                        background: 'var(--color-primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        cursor: importing ? 'not-allowed' : 'pointer',
+                        opacity: importing ? 0.7 : 1
+                      }}
+                    >
+                      {importing ? (
+                        <>
+                          <Loader size={16} className="animate-spin" />
+                          Importing...
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={16} />
+                          Import {importedSongs.filter(s => !s._duplicate).length} Songs
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         )}
 
