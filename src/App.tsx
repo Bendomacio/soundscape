@@ -148,7 +148,9 @@ function AppContent() {
   const [viewState, setViewState] = useState<MapViewState>({
     longitude: -0.1278,
     latitude: 51.5074,
-    zoom: 13
+    zoom: 13,
+    pitch: 45,
+    bearing: 0
   });
 
   // Load songs from database on mount and fetch real Spotify album art (with caching & rate limiting)
