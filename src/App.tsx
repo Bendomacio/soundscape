@@ -14,53 +14,82 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlayerContext';
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
 import { getTrackInfo, handleSpotifyCallback } from './lib/spotify';
+import { handleYouTubeCallback } from './lib/providers/auth';
 import { preloadImages, clearOldCache } from './lib/imageCache';
 import type { SongLocation, MapViewState, ProviderLinks } from './types';
 import { hasPlayableLink } from './types';
 
-// Handle Spotify OAuth callback
-function SpotifyCallbackHandler() {
+// Handle OAuth callbacks for all providers
+function OAuthCallbackHandler() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [providerName, setProviderName] = useState<string>('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const errorParam = params.get('error');
+    const pathname = window.location.pathname;
 
-    // Check if this is a callback from Spotify
-    if (window.location.pathname === '/callback' || code) {
-      if (errorParam) {
-        setError('Spotify authorization was denied');
-        // Clear URL params
-        window.history.replaceState({}, '', '/');
-        return;
-      }
+    // Determine which provider callback this is
+    let provider: 'spotify' | 'youtube' | null = null;
+    let providerColor = '#1DB954';
 
-      if (code && !isProcessing) {
-        setIsProcessing(true);
-        handleSpotifyCallback(code)
-          .then((auth) => {
-            if (auth) {
-              console.log('Spotify connected successfully!');
-              // Force reload to re-initialize player with new auth
-              window.location.href = '/';
-            } else {
-              setError('Failed to connect to Spotify');
-              window.history.replaceState({}, '', '/');
-            }
-          })
-          .catch((err) => {
-            console.error('Callback error:', err);
-            setError('Failed to connect to Spotify');
-            window.history.replaceState({}, '', '/');
-          })
-          .finally(() => setIsProcessing(false));
-      }
+    if (pathname === '/callback/youtube') {
+      provider = 'youtube';
+      providerColor = '#FF0000';
+      setProviderName('YouTube');
+    } else if (pathname === '/callback' || (code && !pathname.includes('/callback/'))) {
+      provider = 'spotify';
+      providerColor = '#1DB954';
+      setProviderName('Spotify');
     }
-  }, [isProcessing]);
+
+    if (!provider) return;
+
+    if (errorParam) {
+      setError(`${providerName || 'Provider'} authorization was denied`);
+      window.history.replaceState({}, '', '/');
+      return;
+    }
+
+    if (code && !isProcessing) {
+      setIsProcessing(true);
+
+      const handleCallback = async () => {
+        try {
+          let success = false;
+
+          if (provider === 'spotify') {
+            const auth = await handleSpotifyCallback(code);
+            success = !!auth;
+          } else if (provider === 'youtube') {
+            const auth = await handleYouTubeCallback(code);
+            success = !!auth;
+          }
+
+          if (success) {
+            console.log(`${providerName} connected successfully!`);
+            window.location.href = '/';
+          } else {
+            setError(`Failed to connect to ${providerName}`);
+            window.history.replaceState({}, '', '/');
+          }
+        } catch (err) {
+          console.error('Callback error:', err);
+          setError(`Failed to connect to ${providerName}`);
+          window.history.replaceState({}, '', '/');
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+
+      handleCallback();
+    }
+  }, [isProcessing, providerName]);
 
   if (isProcessing) {
+    const color = providerName === 'YouTube' ? '#FF0000' : '#1DB954';
     return (
       <div style={{
         position: 'fixed',
@@ -77,10 +106,10 @@ function SpotifyCallbackHandler() {
           width: 48,
           height: 48,
           border: '3px solid var(--color-dark-lighter)',
-          borderTopColor: '#1DB954',
+          borderTopColor: color,
           borderRadius: '50%'
         }} />
-        <p style={{ color: 'var(--color-text)' }}>Connecting to Spotify...</p>
+        <p style={{ color: 'var(--color-text)' }}>Connecting to {providerName}...</p>
       </div>
     );
   }
@@ -99,7 +128,7 @@ function SpotifyCallbackHandler() {
         zIndex: 9999
       }}>
         {error}
-        <button 
+        <button
           onClick={() => setError(null)}
           style={{ marginLeft: '12px', textDecoration: 'underline', background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}
         >
@@ -719,7 +748,7 @@ function App() {
   return (
     <AuthProvider>
       <SpotifyPlayerProvider>
-        <SpotifyCallbackHandler />
+        <OAuthCallbackHandler />
         <AppContent />
       </SpotifyPlayerProvider>
     </AuthProvider>

@@ -19,6 +19,31 @@ import { logger } from '../lib/logger';
 import { getBestProvider, getAdapter, providers } from '../lib/providers';
 import { getPreferenceFromCookie, setPreferenceCookie } from '../lib/preferences';
 import { useAuth } from './AuthContext';
+// Provider auth imports
+import {
+  type ProviderConnection,
+  type ProviderConnections,
+  defaultConnection,
+  // YouTube
+  initiateYouTubeLogin,
+  isYouTubeConnected,
+  clearYouTubeAuth,
+  getCachedYouTubeProfile,
+  // Apple Music
+  initiateAppleMusicLogin,
+  isAppleMusicConnected,
+  clearAppleMusicAuth,
+  getCachedAppleMusicProfile,
+  isAppleMusicConfigured,
+  // SoundCloud
+  initiateSoundCloudLogin,
+  confirmSoundCloudConnection,
+  isSoundCloudConnected,
+  clearSoundCloudAuth,
+  getSoundCloudUserProfile,
+  isSoundCloudConnectionPending,
+  setSoundCloudPremium
+} from '../lib/providers/auth';
 
 interface MusicPlayerState {
   currentSong: SongLocation | null;
@@ -41,6 +66,8 @@ interface SpotifyConnection {
 
 interface MusicPlayerContextType extends MusicPlayerState {
   connection: SpotifyConnection;
+  // All provider connections
+  providerConnections: ProviderConnections;
   play: (song: SongLocation) => void;
   pause: () => void;
   resume: () => void;
@@ -49,6 +76,11 @@ interface MusicPlayerContextType extends MusicPlayerState {
   seek: (position: number) => void;
   connectSpotify: () => void;
   disconnectSpotify: () => void;
+  // Multi-provider connection support
+  connectProvider: (provider: MusicProvider) => void;
+  disconnectProvider: (provider: MusicProvider) => void;
+  confirmSoundCloud: (isPremium: boolean, displayName?: string) => void;
+  setSoundCloudPremiumStatus: (isPremium: boolean) => void;
   // Multi-provider support
   setProviderPreference: (provider: MusicProvider) => void;
 }
@@ -87,6 +119,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     isConnecting: false
   });
 
+  // All provider connections
+  const [providerConnections, setProviderConnections] = useState<ProviderConnections>({
+    spotify: { ...defaultConnection },
+    youtube: { ...defaultConnection },
+    apple_music: { ...defaultConnection },
+    soundcloud: { ...defaultConnection }
+  });
+
   const playerRef = useRef<SpotifyWebPlayer | null>(null);
   const deviceIdRef = useRef<string | null>(null);
   const embedControllerRef = useRef<SpotifyEmbedController | null>(null);
@@ -98,7 +138,61 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   // Check connection status on mount
   useEffect(() => {
     checkConnection();
+    checkAllProviderConnections();
   }, []);
+
+  // Check all provider connections
+  async function checkAllProviderConnections() {
+    // Spotify - handled by existing checkConnection()
+
+    // YouTube
+    if (isYouTubeConnected()) {
+      const profile = getCachedYouTubeProfile();
+      setProviderConnections(prev => ({
+        ...prev,
+        youtube: {
+          isConnected: true,
+          isPremium: profile?.isPremium || false,
+          userName: profile?.name || null,
+          avatarUrl: profile?.avatarUrl || null,
+          isConnecting: false,
+          error: null
+        }
+      }));
+    }
+
+    // Apple Music
+    if (isAppleMusicConnected()) {
+      const profile = getCachedAppleMusicProfile();
+      setProviderConnections(prev => ({
+        ...prev,
+        apple_music: {
+          isConnected: true,
+          isPremium: profile?.isPremium || false,
+          userName: profile?.name || null,
+          avatarUrl: null,
+          isConnecting: false,
+          error: null
+        }
+      }));
+    }
+
+    // SoundCloud
+    if (isSoundCloudConnected()) {
+      const profile = getSoundCloudUserProfile();
+      setProviderConnections(prev => ({
+        ...prev,
+        soundcloud: {
+          isConnected: true,
+          isPremium: profile?.isPremium || false,
+          userName: profile?.name || null,
+          avatarUrl: profile?.avatarUrl || null,
+          isConnecting: false,
+          error: null
+        }
+      }));
+    }
+  }
 
   async function checkConnection() {
     if (!isSpotifyConnected()) {
@@ -119,19 +213,36 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     // Get user profile to check premium status
     const profile = await getSpotifyUserProfile();
     if (profile) {
+      const isPremium = profile.product === 'premium';
       setConnection({
         isConnected: true,
-        isPremium: profile.product === 'premium',
+        isPremium,
         userName: profile.display_name,
         isConnecting: false
       });
+      // Also update provider connections
+      setProviderConnections(prev => ({
+        ...prev,
+        spotify: {
+          isConnected: true,
+          isPremium,
+          userName: profile.display_name,
+          avatarUrl: profile.images?.[0]?.url || null,
+          isConnecting: false,
+          error: null
+        }
+      }));
 
       // Initialize Web Playback SDK if premium
-      if (profile.product === 'premium') {
+      if (isPremium) {
         initializeWebPlaybackSDK();
       }
     } else {
       setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+      setProviderConnections(prev => ({
+        ...prev,
+        spotify: { ...defaultConnection }
+      }));
     }
   }
 
@@ -562,8 +673,131 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     deviceIdRef.current = null;
     clearSpotifyAuth();
     setConnection({ isConnected: false, isPremium: false, userName: null, isConnecting: false });
+    setProviderConnections(prev => ({
+      ...prev,
+      spotify: { ...defaultConnection }
+    }));
     stop();
   }, [stop]);
+
+  // Generic provider connect/disconnect
+  const connectProvider = useCallback(async (provider: MusicProvider) => {
+    setProviderConnections(prev => ({
+      ...prev,
+      [provider]: { ...prev[provider], isConnecting: true, error: null }
+    }));
+
+    try {
+      switch (provider) {
+        case 'spotify':
+          initiateSpotifyLogin();
+          break;
+        case 'youtube':
+          await initiateYouTubeLogin();
+          break;
+        case 'apple_music':
+          const appleSuccess = await initiateAppleMusicLogin();
+          if (appleSuccess) {
+            const profile = getCachedAppleMusicProfile();
+            setProviderConnections(prev => ({
+              ...prev,
+              apple_music: {
+                isConnected: true,
+                isPremium: profile?.isPremium || false,
+                userName: profile?.name || null,
+                avatarUrl: null,
+                isConnecting: false,
+                error: null
+              }
+            }));
+          } else {
+            setProviderConnections(prev => ({
+              ...prev,
+              apple_music: {
+                ...prev.apple_music,
+                isConnecting: false,
+                error: isAppleMusicConfigured() ? 'Authorization failed' : 'Not configured'
+              }
+            }));
+          }
+          break;
+        case 'soundcloud':
+          initiateSoundCloudLogin();
+          // SoundCloud uses a confirmation flow, so we just mark as pending
+          setProviderConnections(prev => ({
+            ...prev,
+            soundcloud: { ...prev.soundcloud, isConnecting: false }
+          }));
+          break;
+      }
+    } catch (error) {
+      logger.error(`Failed to connect ${provider}:`, error);
+      setProviderConnections(prev => ({
+        ...prev,
+        [provider]: {
+          ...prev[provider],
+          isConnecting: false,
+          error: 'Connection failed'
+        }
+      }));
+    }
+  }, []);
+
+  const disconnectProvider = useCallback((provider: MusicProvider) => {
+    switch (provider) {
+      case 'spotify':
+        disconnectSpotify();
+        break;
+      case 'youtube':
+        clearYouTubeAuth();
+        setProviderConnections(prev => ({
+          ...prev,
+          youtube: { ...defaultConnection }
+        }));
+        break;
+      case 'apple_music':
+        clearAppleMusicAuth();
+        setProviderConnections(prev => ({
+          ...prev,
+          apple_music: { ...defaultConnection }
+        }));
+        break;
+      case 'soundcloud':
+        clearSoundCloudAuth();
+        setProviderConnections(prev => ({
+          ...prev,
+          soundcloud: { ...defaultConnection }
+        }));
+        break;
+    }
+  }, [disconnectSpotify]);
+
+  // SoundCloud confirmation (since it doesn't have real OAuth)
+  const confirmSoundCloud = useCallback((isPremium: boolean, displayName?: string) => {
+    confirmSoundCloudConnection(isPremium, displayName);
+    setProviderConnections(prev => ({
+      ...prev,
+      soundcloud: {
+        isConnected: true,
+        isPremium,
+        userName: displayName || 'SoundCloud User',
+        avatarUrl: null,
+        isConnecting: false,
+        error: null
+      }
+    }));
+  }, []);
+
+  const setSoundCloudPremiumStatus = useCallback((isPremium: boolean) => {
+    setSoundCloudPremium(isPremium);
+    setProviderConnections(prev => ({
+      ...prev,
+      soundcloud: {
+        ...prev.soundcloud,
+        isPremium
+      }
+    }));
+  }, []);
 
   const setProviderPreference = useCallback((provider: MusicProvider) => {
     setPreferenceCookie(provider);
@@ -583,6 +817,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     <MusicPlayerContext.Provider value={{
       ...state,
       connection,
+      providerConnections,
       play,
       pause,
       resume,
@@ -591,6 +826,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       stop,
       connectSpotify,
       disconnectSpotify,
+      connectProvider,
+      disconnectProvider,
+      confirmSoundCloud,
+      setSoundCloudPremiumStatus,
       setProviderPreference
     }}>
       {children}

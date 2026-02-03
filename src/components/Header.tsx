@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Check, Unlink, Sparkles } from 'lucide-react';
+import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Check, Unlink, Sparkles, Link2, ExternalLink, Crown, AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { LoadingSpinner, UserAvatar } from './ui';
 import type { MusicProvider } from '../types';
+import { isSoundCloudConnectionPending } from '../lib/providers/auth';
 
 // Provider icons and colors
 const PROVIDER_CONFIG: Record<MusicProvider, { name: string; color: string; icon: React.ReactNode }> = {
@@ -54,11 +55,37 @@ interface HeaderProps {
 
 export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissionsClick }: HeaderProps) {
   const { user, profile, isAdmin, signOut, isDevMode, isDevSession, devLogin } = useAuth();
-  const { connection, connectSpotify, disconnectSpotify, userPreference, setProviderPreference } = useMusicPlayer();
+  const {
+    connection,
+    providerConnections,
+    connectSpotify,
+    disconnectSpotify,
+    connectProvider,
+    disconnectProvider,
+    confirmSoundCloud,
+    setSoundCloudPremiumStatus,
+    userPreference,
+    setProviderPreference
+  } = useMusicPlayer();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showDevMenu, setShowDevMenu] = useState(false);
+  const [showSoundCloudConfirm, setShowSoundCloudConfirm] = useState(false);
+  const [soundCloudPremiumToggle, setSoundCloudPremiumToggle] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const devMenuRef = useRef<HTMLDivElement>(null);
+
+  // Check for pending SoundCloud confirmation
+  useEffect(() => {
+    const checkPending = () => {
+      if (isSoundCloudConnectionPending()) {
+        setShowSoundCloudConfirm(true);
+      }
+    };
+    checkPending();
+    // Check periodically in case user returns from SoundCloud
+    const interval = setInterval(checkPending, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -365,68 +392,281 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                   </div>
                 </div>
 
-                {/* Spotify Connection Section */}
+                {/* Connected Accounts Section */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--glass-border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#1DB954">
-                        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                      </svg>
-                      <span style={{ fontSize: '13px', fontWeight: 500 }}>Spotify</span>
-                    </div>
-                    {connection.isConnecting ? (
-                      <LoadingSpinner size={16} className="text-[var(--color-text-muted)]" />
-                    ) : connection.isConnected ? (
-                      <div className="badge badge-spotify" style={{ padding: '2px 8px', fontSize: '10px' }}>
-                        <Check size={10} />
-                        {connection.isPremium ? 'Premium' : 'Free'}
-                      </div>
-                    ) : null}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <Link2 size={16} style={{ color: 'var(--color-text-muted)' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>Connected Accounts</span>
                   </div>
+                  <p style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '12px', lineHeight: 1.4 }}>
+                    Link your music accounts for premium playback features
+                  </p>
 
-                  {connection.isConnected ? (
-                    <button
-                      onClick={() => disconnectSpotify()}
-                      className="dropdown-item"
-                      style={{
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        color: 'var(--color-text-muted)',
-                        background: 'rgba(255, 255, 255, 0.03)'
-                      }}
-                    >
-                      <Unlink size={14} />
-                      <span>Disconnect Spotify</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => connectSpotify()}
-                      style={{
-                        width: '100%',
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {(Object.keys(PROVIDER_CONFIG) as MusicProvider[]).map(provider => {
+                      const config = PROVIDER_CONFIG[provider];
+                      const conn = providerConnections[provider];
+                      const isSpotify = provider === 'spotify';
+                      const isSoundCloud = provider === 'soundcloud';
+
+                      return (
+                        <div
+                          key={provider}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            background: conn.isConnected ? `${config.color}10` : 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: '10px',
+                            border: conn.isConnected ? `1px solid ${config.color}40` : '1px solid transparent'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                            <span style={{ color: conn.isConnected ? config.color : 'var(--color-text-muted)', flexShrink: 0 }}>
+                              {config.icon}
+                            </span>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  color: conn.isConnected ? 'var(--color-text)' : 'var(--color-text-muted)'
+                                }}>
+                                  {config.name}
+                                </span>
+                                {conn.isConnected && (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 6px',
+                                    background: conn.isPremium ? `${config.color}30` : 'rgba(255, 255, 255, 0.1)',
+                                    borderRadius: '4px',
+                                    fontSize: '9px',
+                                    fontWeight: 600,
+                                    color: conn.isPremium ? config.color : 'var(--color-text-muted)'
+                                  }}>
+                                    {conn.isPremium && <Crown size={8} />}
+                                    {conn.isPremium ? 'Premium' : 'Connected'}
+                                  </div>
+                                )}
+                              </div>
+                              {conn.isConnected && conn.userName && (
+                                <span style={{
+                                  fontSize: '10px',
+                                  color: 'var(--color-text-muted)',
+                                  display: 'block',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>
+                                  {conn.userName}
+                                </span>
+                              )}
+                              {conn.error && (
+                                <span style={{
+                                  fontSize: '10px',
+                                  color: '#ef4444',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  <AlertCircle size={10} />
+                                  {conn.error}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            {/* SoundCloud Premium toggle */}
+                            {isSoundCloud && conn.isConnected && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSoundCloudPremiumStatus(!conn.isPremium);
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  background: conn.isPremium ? `${config.color}20` : 'transparent',
+                                  border: `1px solid ${conn.isPremium ? config.color : 'var(--glass-border)'}`,
+                                  borderRadius: '6px',
+                                  fontSize: '9px',
+                                  fontWeight: 500,
+                                  color: conn.isPremium ? config.color : 'var(--color-text-muted)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title="Toggle SoundCloud Go status"
+                              >
+                                Go+
+                              </button>
+                            )}
+
+                            {conn.isConnecting ? (
+                              <LoadingSpinner size={14} className="text-[var(--color-text-muted)]" />
+                            ) : conn.isConnected ? (
+                              <button
+                                onClick={() => isSpotify ? disconnectSpotify() : disconnectProvider(provider)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  background: 'transparent',
+                                  border: '1px solid var(--glass-border)',
+                                  borderRadius: '6px',
+                                  fontSize: '10px',
+                                  color: 'var(--color-text-muted)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <Unlink size={10} />
+                                Unlink
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => isSpotify ? connectSpotify() : connectProvider(provider)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 10px',
+                                  background: config.color,
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '10px',
+                                  fontWeight: 600,
+                                  color: 'white',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.15s ease',
+                                  boxShadow: `0 2px 8px ${config.color}40`
+                                }}
+                              >
+                                <ExternalLink size={10} />
+                                Link
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* SoundCloud Confirmation Modal */}
+                {showSoundCloudConfirm && (
+                  <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    background: 'rgba(0, 0, 0, 0.6)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                  }}>
+                    <div style={{
+                      background: 'var(--color-dark-lighter)',
+                      borderRadius: '16px',
+                      padding: '24px',
+                      maxWidth: '320px',
+                      width: '90%',
+                      border: '1px solid var(--glass-border)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                        <div style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '10px',
+                          background: '#FF550020',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          {PROVIDER_CONFIG.soundcloud.icon}
+                        </div>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>Link SoundCloud</h3>
+                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                            Confirm your connection
+                          </p>
+                        </div>
+                      </div>
+
+                      <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+                        Did you sign in to SoundCloud? If you have SoundCloud Go or Go+, toggle it on for ad-free playback.
+                      </p>
+
+                      <label style={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        padding: '10px 16px',
-                        background: '#1DB954',
+                        gap: '10px',
+                        padding: '12px',
+                        background: soundCloudPremiumToggle ? '#FF550020' : 'rgba(255, 255, 255, 0.03)',
                         borderRadius: '10px',
-                        border: 'none',
-                        color: 'white',
-                        fontSize: '13px',
-                        fontWeight: 600,
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        boxShadow: '0 2px 10px rgba(29, 185, 84, 0.3)'
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                      </svg>
-                      Connect Spotify
-                    </button>
-                  )}
-                </div>
+                        marginBottom: '16px',
+                        border: soundCloudPremiumToggle ? '1px solid #FF550060' : '1px solid transparent'
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={soundCloudPremiumToggle}
+                          onChange={(e) => setSoundCloudPremiumToggle(e.target.checked)}
+                          style={{ width: '16px', height: '16px', accentColor: '#FF5500' }}
+                        />
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: 500 }}>I have SoundCloud Go/Go+</span>
+                          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block' }}>
+                            Enables full playback & no ads
+                          </span>
+                        </div>
+                      </label>
+
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => {
+                            setShowSoundCloudConfirm(false);
+                            sessionStorage.removeItem('soundcloud_connect_pending');
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            background: 'transparent',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            color: 'var(--color-text-muted)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => {
+                            confirmSoundCloud(soundCloudPremiumToggle);
+                            setShowSoundCloudConfirm(false);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px',
+                            background: '#FF5500',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: 'white',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 10px rgba(255, 85, 0, 0.3)'
+                          }}
+                        >
+                          Confirm
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Default Player Section */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--glass-border)' }}>

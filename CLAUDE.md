@@ -30,7 +30,10 @@ Soundscape is a location-based music discovery app built with React 19, TypeScri
 ### Key Contexts
 
 - **AuthContext** (`contexts/AuthContext.tsx`): Supabase auth state, user profile with admin status
-- **SpotifyPlayerContext** (`contexts/SpotifyPlayerContext.tsx`): Player state, OAuth connection, play/pause/seek controls
+- **MusicPlayerContext** (`contexts/MusicPlayerContext.tsx`): Multi-provider player state, OAuth connections for all providers, play/pause/seek controls
+  - Tracks connection status for Spotify, YouTube, Apple Music, and SoundCloud
+  - `providerConnections` object stores `isConnected`, `isPremium`, `userName` for each
+  - Provider auth modules in `lib/providers/auth/` handle OAuth flows
 
 ### Database Layer
 
@@ -74,8 +77,14 @@ Required:
 - `VITE_MAPBOX_TOKEN` - Mapbox public token (starts with `pk.`)
 - `VITE_SPOTIFY_CLIENT_ID` - Required for Spotify OAuth/playback
 
-Optional:
+Optional (Spotify):
 - `VITE_SPOTIFY_CLIENT_SECRET` - Enables real Spotify search (otherwise uses mock results)
+
+Optional (Provider OAuth - for premium playback):
+- `VITE_GOOGLE_CLIENT_ID` - Google OAuth for YouTube account linking (enables premium playback)
+- `VITE_APPLE_MUSIC_TOKEN` - Apple MusicKit developer token (enables Apple Music subscriber playback)
+
+Note: SoundCloud doesn't have a public API, so it uses a self-reported connection flow.
 
 ## Database Scripts
 
