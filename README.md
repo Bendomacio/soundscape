@@ -195,5 +195,5 @@ This project is private. All rights reserved.
 ---
 
 <p align="center">
-  Built with ❤️ using React, Supabase, Mapbox, and Spotify
+  Built with ❤️ using React, Supabase, Mapbox, and Spotify (when the api is open)
 </p>
