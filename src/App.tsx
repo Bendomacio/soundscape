@@ -670,6 +670,11 @@ function AppContent() {
           song={currentSong}
           onClose={() => setShowDetailPanel(false)}
           userLocation={userLocation}
+          allSongs={songs}
+          onSongSelect={(song) => {
+            setCurrentSong(song);
+            setSelectedSong(song);
+          }}
         />
       )}
 
