@@ -113,7 +113,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
   const [likeCount, setLikeCount] = useState(song.upvotes || 0);
   const [isLiking, setIsLiking] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'info' | 'nearby' | 'related' | 'comments' | 'photos'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'comments' | 'photos'>('info');
   const [comments, setComments] = useState<SongComment[]>([]);
   const [photos, setPhotos] = useState<SongPhoto[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -327,6 +327,9 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
     return date.toLocaleDateString();
   };
 
+  // Check if on desktop for sidebar display
+  const isDesktop = !isMobile();
+
   return (
     <div style={{
       position: 'fixed',
@@ -341,7 +344,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
       zIndex: 9999
     }}>
       {/* Backdrop with blur */}
-      <div 
+      <div
         onClick={onClose}
         style={{
           position: 'absolute',
@@ -351,27 +354,36 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           bottom: 0,
           background: 'rgba(0, 0, 0, 0.85)',
           backdropFilter: 'blur(8px)'
-        }} 
+        }}
       />
-      
-      {/* Panel - Centered Modal */}
-      <div 
-        ref={panelRef}
+
+      {/* Container for main panel + sidebars */}
+      <div
         onClick={e => e.stopPropagation()}
-        className="song-detail-panel"
         style={{
-          position: 'relative',
-          width: '100%',
-          maxWidth: '420px',
-          maxHeight: '90vh',
-          background: 'var(--color-dark-card)',
-          borderRadius: '24px',
-          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
-          overflow: 'hidden',
           display: 'flex',
-          flexDirection: 'column'
+          gap: '16px',
+          maxHeight: '90vh',
+          position: 'relative'
         }}
       >
+        {/* Main Panel */}
+        <div
+          ref={panelRef}
+          className="song-detail-panel"
+          style={{
+            position: 'relative',
+            width: '100%',
+            maxWidth: '420px',
+            maxHeight: '90vh',
+            background: 'var(--color-dark-card)',
+            borderRadius: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
         {/* Dynamic gradient header based on album colors */}
         <div style={{
           position: 'relative',
@@ -700,8 +712,6 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           }}>
             {[
               { id: 'info' as const, label: 'Info', icon: Music },
-              { id: 'nearby' as const, label: 'Nearby', icon: Compass },
-              { id: 'related' as const, label: 'Related', icon: Users },
               { id: 'comments' as const, label: 'Comments', icon: MessageCircle },
               { id: 'photos' as const, label: 'Photos', icon: Camera }
             ].map(tab => (
@@ -850,196 +860,6 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                     ? 'Route shown from your current location'
                     : 'Tap "Get Directions" to navigate to this song\'s location'}
                 </p>
-              </div>
-            )}
-
-            {/* Nearby Tab */}
-            {activeTab === 'nearby' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {nearbySongs.length === 0 ? (
-                  <EmptyState icon={Compass} message="No other songs within 5km" />
-                ) : (
-                  <>
-                    <p style={{
-                      fontSize: '12px',
-                      color: 'var(--color-text-muted)',
-                      margin: '0 0 8px 0'
-                    }}>
-                      {nearbySongs.length} song{nearbySongs.length !== 1 ? 's' : ''} within 5km
-                    </p>
-                    {nearbySongs.map(nearbySong => (
-                      <button
-                        key={nearbySong.id}
-                        onClick={() => onSongSelect?.(nearbySong)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          padding: '12px',
-                          background: 'var(--color-dark-lighter)',
-                          border: 'none',
-                          borderRadius: '12px',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          width: '100%',
-                          transition: 'background 0.2s'
-                        }}
-                      >
-                        {/* Mini album art */}
-                        <div style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '8px',
-                          overflow: 'hidden',
-                          flexShrink: 0,
-                          background: 'var(--color-dark-card)'
-                        }}>
-                          {nearbySong.albumArt ? (
-                            <img
-                              src={nearbySong.albumArt}
-                              alt={nearbySong.title}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <div style={{
-                              width: '100%',
-                              height: '100%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <Music size={20} color="var(--color-text-muted)" />
-                            </div>
-                          )}
-                        </div>
-                        {/* Song info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontWeight: 600,
-                            fontSize: '14px',
-                            color: 'white',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {nearbySong.title}
-                          </div>
-                          <div style={{
-                            fontSize: '13px',
-                            color: 'var(--color-text-muted)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {nearbySong.artist}
-                          </div>
-                        </div>
-                        {/* Distance badge */}
-                        <div style={{
-                          padding: '4px 10px',
-                          background: 'var(--color-dark-card)',
-                          borderRadius: '20px',
-                          fontSize: '12px',
-                          color: 'var(--color-primary)',
-                          fontWeight: 500,
-                          flexShrink: 0
-                        }}>
-                          {formatDistance(nearbySong.distance)}
-                        </div>
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Related Tab */}
-            {activeTab === 'related' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {relatedSongs.length === 0 ? (
-                  <EmptyState icon={Users} message={`No other songs by ${song.artist}`} />
-                ) : (
-                  <>
-                    <p style={{
-                      fontSize: '12px',
-                      color: 'var(--color-text-muted)',
-                      margin: '0 0 8px 0'
-                    }}>
-                      {relatedSongs.length} other song{relatedSongs.length !== 1 ? 's' : ''} by {song.artist}
-                    </p>
-                    {relatedSongs.map(relatedSong => (
-                      <button
-                        key={relatedSong.id}
-                        onClick={() => onSongSelect?.(relatedSong)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          padding: '12px',
-                          background: 'var(--color-dark-lighter)',
-                          border: 'none',
-                          borderRadius: '12px',
-                          cursor: 'pointer',
-                          textAlign: 'left',
-                          width: '100%',
-                          transition: 'background 0.2s'
-                        }}
-                      >
-                        {/* Mini album art */}
-                        <div style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '8px',
-                          overflow: 'hidden',
-                          flexShrink: 0,
-                          background: 'var(--color-dark-card)'
-                        }}>
-                          {relatedSong.albumArt ? (
-                            <img
-                              src={relatedSong.albumArt}
-                              alt={relatedSong.title}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <div style={{
-                              width: '100%',
-                              height: '100%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <Music size={20} color="var(--color-text-muted)" />
-                            </div>
-                          )}
-                        </div>
-                        {/* Song info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{
-                            fontWeight: 600,
-                            fontSize: '14px',
-                            color: 'white',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {relatedSong.title}
-                          </div>
-                          <div style={{
-                            fontSize: '13px',
-                            color: 'var(--color-text-muted)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap'
-                          }}>
-                            {relatedSong.locationName}
-                          </div>
-                        </div>
-                        {/* Location icon */}
-                        <MapPin size={16} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
-                      </button>
-                    ))}
-                  </>
-                )}
               </div>
             )}
 
@@ -1297,6 +1117,222 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             )}
           </div>
         </div>
+        </div>
+
+        {/* Sidebar panels - Desktop only */}
+        {isDesktop && (nearbySongs.length > 0 || relatedSongs.length > 0) && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            width: '280px',
+            maxHeight: '90vh',
+            flexShrink: 0
+          }}>
+            {/* Songs Nearby Panel */}
+            {nearbySongs.length > 0 && (
+              <div style={{
+                background: 'var(--color-dark-card)',
+                borderRadius: '16px',
+                border: '1px solid var(--color-primary)',
+                overflow: 'hidden',
+                maxHeight: 'calc(45vh - 8px)'
+              }}>
+                <div style={{
+                  padding: '16px',
+                  borderBottom: '1px solid var(--color-dark-lighter)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'white'
+                }}>
+                  Songs Nearby
+                </div>
+                <div style={{
+                  padding: '12px',
+                  overflowY: 'auto',
+                  maxHeight: 'calc(45vh - 60px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {nearbySongs.map(nearbySong => (
+                    <button
+                      key={nearbySong.id}
+                      onClick={() => onSongSelect?.(nearbySong)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px',
+                        background: 'var(--color-dark-lighter)',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        width: '100%',
+                        transition: 'background 0.2s'
+                      }}
+                    >
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '6px',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--color-dark-card)'
+                      }}>
+                        {nearbySong.albumArt ? (
+                          <img
+                            src={nearbySong.albumArt}
+                            alt={nearbySong.title}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Music size={16} color="var(--color-text-muted)" />
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontWeight: 500,
+                          fontSize: '13px',
+                          color: 'white',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {nearbySong.title}
+                        </div>
+                        <div style={{
+                          fontSize: '11px',
+                          color: 'var(--color-text-muted)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {nearbySong.artist}
+                        </div>
+                      </div>
+                      <div style={{
+                        fontSize: '11px',
+                        color: 'var(--color-primary)',
+                        fontWeight: 500,
+                        flexShrink: 0
+                      }}>
+                        {formatDistance(nearbySong.distance)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Related Songs Panel */}
+            {relatedSongs.length > 0 && (
+              <div style={{
+                background: 'var(--color-dark-card)',
+                borderRadius: '16px',
+                border: '1px solid var(--color-primary)',
+                overflow: 'hidden',
+                maxHeight: 'calc(45vh - 8px)'
+              }}>
+                <div style={{
+                  padding: '16px',
+                  borderBottom: '1px solid var(--color-dark-lighter)',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'white'
+                }}>
+                  Related Songs
+                </div>
+                <div style={{
+                  padding: '12px',
+                  overflowY: 'auto',
+                  maxHeight: 'calc(45vh - 60px)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {relatedSongs.map(relatedSong => (
+                    <button
+                      key={relatedSong.id}
+                      onClick={() => onSongSelect?.(relatedSong)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px',
+                        background: 'var(--color-dark-lighter)',
+                        border: 'none',
+                        borderRadius: '10px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        width: '100%',
+                        transition: 'background 0.2s'
+                      }}
+                    >
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '6px',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--color-dark-card)'
+                      }}>
+                        {relatedSong.albumArt ? (
+                          <img
+                            src={relatedSong.albumArt}
+                            alt={relatedSong.title}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <div style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Music size={16} color="var(--color-text-muted)" />
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontWeight: 500,
+                          fontSize: '13px',
+                          color: 'white',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {relatedSong.title}
+                        </div>
+                        <div style={{
+                          fontSize: '11px',
+                          color: 'var(--color-text-muted)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {relatedSong.locationName}
+                        </div>
+                      </div>
+                      <MapPin size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
