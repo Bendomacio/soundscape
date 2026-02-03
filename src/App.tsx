@@ -15,6 +15,8 @@ import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlaye
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
 import { getTrackInfo, handleSpotifyCallback } from './lib/spotify';
 import { handleYouTubeCallback } from './lib/providers/auth';
+
+// Force Vercel rebuild - provider linking feature
 import { preloadImages, clearOldCache } from './lib/imageCache';
 import type { SongLocation, MapViewState, ProviderLinks } from './types';
 import { hasPlayableLink } from './types';
