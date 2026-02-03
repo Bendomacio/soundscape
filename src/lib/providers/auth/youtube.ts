@@ -69,6 +69,7 @@ export async function initiateYouTubeLogin(): Promise<void> {
 
   // Store verifier for callback
   sessionStorage.setItem(CODE_VERIFIER_KEY, codeVerifier);
+  console.log('YouTube OAuth: stored code verifier, length:', codeVerifier.length);
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -89,9 +90,10 @@ export async function initiateYouTubeLogin(): Promise<void> {
  */
 export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAuth | null> {
   const codeVerifier = sessionStorage.getItem(CODE_VERIFIER_KEY);
+  console.log('YouTube callback: code verifier from storage:', codeVerifier ? `found (${codeVerifier.length} chars)` : 'NOT FOUND');
 
   if (!codeVerifier) {
-    logger.error('No code verifier found for YouTube OAuth');
+    console.error('No code verifier found for YouTube OAuth');
     return null;
   }
 
@@ -112,7 +114,13 @@ export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAu
 
     if (!response.ok) {
       const error = await response.json();
-      logger.error('YouTube token exchange failed:', error);
+      console.error('YouTube token exchange failed:', error);
+      console.error('Request details:', {
+        client_id: GOOGLE_CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        hasCodeVerifier: !!codeVerifier,
+        codeLength: code?.length
+      });
       return null;
     }
 

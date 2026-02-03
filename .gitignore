@@ -36,3 +36,5 @@ vite_err.txt
 vite_out.txt
 test-spotify-ids.html
 .mcp.json
+.vercel
+.env*.local
