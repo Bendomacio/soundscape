@@ -1,8 +1,33 @@
 import { supabase } from './supabase';
-import type { SongLocation, SongStatus } from '../types';
+import type { SongLocation, SongStatus, ProviderLinks } from '../types';
 import type { DbSongRow, DbSongRowUpdate } from '../types/database';
 import { londonSongs } from '../data/londonSongs';
 import { logger } from './logger';
+
+// Build providerLinks from database columns
+function buildProviderLinks(row: DbSongRow): ProviderLinks | undefined {
+  const links: ProviderLinks = {};
+  let hasAny = false;
+
+  if (row.spotify_uri) {
+    links.spotify = row.spotify_uri.replace('spotify:track:', '');
+    hasAny = true;
+  }
+  if (row.youtube_id) {
+    links.youtube = row.youtube_id;
+    hasAny = true;
+  }
+  if (row.apple_music_id) {
+    links.appleMusic = row.apple_music_id;
+    hasAny = true;
+  }
+  if (row.soundcloud_url) {
+    links.soundcloud = row.soundcloud_url;
+    hasAny = true;
+  }
+
+  return hasAny ? links : undefined;
+}
 
 // Convert database row to SongLocation type
 function dbToSong(row: DbSongRow): SongLocation {
@@ -25,7 +50,8 @@ function dbToSong(row: DbSongRow): SongLocation {
     submittedBy: row.submitted_by ?? undefined,
     submittedAt: row.created_at ? new Date(row.created_at) : undefined,
     status: row.status || 'live',
-    adminNotes: row.admin_notes ?? undefined
+    adminNotes: row.admin_notes ?? undefined,
+    providerLinks: buildProviderLinks(row)
   };
 }
 
@@ -50,6 +76,27 @@ function songToDb(song: Partial<SongLocation> & { id?: string }): DbSongRowUpdat
   if (song.submittedBy !== undefined) db.submitted_by = song.submittedBy;
   if (song.status !== undefined) db.status = song.status;
   if (song.adminNotes !== undefined) db.admin_notes = song.adminNotes;
+
+  // Handle providerLinks
+  if (song.providerLinks !== undefined) {
+    if (song.providerLinks) {
+      // Update spotify_uri from providerLinks.spotify if present
+      if (song.providerLinks.spotify !== undefined) {
+        const spotifyId = song.providerLinks.spotify.replace('spotify:track:', '');
+        db.spotify_uri = spotifyId ? `spotify:track:${spotifyId}` : null;
+      }
+      if (song.providerLinks.youtube !== undefined) {
+        db.youtube_id = song.providerLinks.youtube || null;
+      }
+      if (song.providerLinks.appleMusic !== undefined) {
+        db.apple_music_id = song.providerLinks.appleMusic || null;
+      }
+      if (song.providerLinks.soundcloud !== undefined) {
+        db.soundcloud_url = song.providerLinks.soundcloud || null;
+      }
+    }
+  }
+
   db.updated_at = new Date().toISOString();
   return db;
 }

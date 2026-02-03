@@ -23,6 +23,7 @@ import {
   Users
 } from 'lucide-react';
 import type { SongLocation, SongComment, SongPhoto } from '../types';
+import { hasPlayableLink } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 import { useAuth } from '../contexts/AuthContext';
 import { getComments, addComment, deleteComment, getPhotos, uploadPhoto } from '../lib/comments';
@@ -133,7 +134,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
   const nearbySongs = useMemo(() => {
     if (!allSongs.length) return [];
     return allSongs
-      .filter(s => s.id !== song.id && s.spotifyUri) // Exclude current song and invalid songs
+      .filter(s => s.id !== song.id && hasPlayableLink(s)) // Exclude current song and invalid songs
       .map(s => ({
         ...s,
         distance: getDistanceKm(song.latitude, song.longitude, s.latitude, s.longitude)
@@ -150,7 +151,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
     return allSongs
       .filter(s =>
         s.id !== song.id &&
-        s.spotifyUri &&
+        hasPlayableLink(s) &&
         s.artist &&
         s.artist.toLowerCase().trim() === currentArtist
       )
@@ -170,7 +171,8 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
     loadLikeState();
   }, [song.id, user]);
 
-  const trackId = song.spotifyUri?.replace('spotify:track:', '');
+  const canPlay = hasPlayableLink(song);
+  const spotifyTrackId = song.spotifyUri?.replace('spotify:track:', '') || song.providerLinks?.spotify?.replace('spotify:track:', '');
   const isThisSongPlaying = currentSong?.id === song.id && isPlaying;
   const isThisSongLoading = currentSong?.id === song.id && isLoading;
 
@@ -451,7 +453,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
               />
 
               {/* Play button overlay - gradient style */}
-              {trackId && (
+              {canPlay && (
                 <button
                   onClick={handlePlayPause}
                   className={!isThisSongPlaying ? 'animate-pulse-glow' : ''}
@@ -652,9 +654,9 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             </button>
 
             {/* Spotify link */}
-            {trackId && (
+            {spotifyTrackId && (
               <a
-                href={`https://open.spotify.com/track/${trackId}`}
+                href={`https://open.spotify.com/track/${spotifyTrackId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-glass"

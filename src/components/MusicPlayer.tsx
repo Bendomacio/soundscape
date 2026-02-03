@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapPin, ChevronUp, Shuffle, Music, Play, Pause, Loader2, Volume2 } from 'lucide-react';
 import type { SongLocation } from '../types';
+import { hasPlayableLink } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 
 interface MusicPlayerProps {
@@ -95,7 +96,7 @@ export function MusicPlayer({
     );
   }
 
-  const hasSpotifyTrack = !!currentSong.spotifyUri;
+  const hasTrack = hasPlayableLink(currentSong);
   const showProgressBar = connection.isPremium && playingSong?.id === currentSong?.id && duration > 0;
 
   return (
@@ -328,7 +329,7 @@ export function MusicPlayer({
             {/* Play/Pause button */}
             <button
               onClick={handlePlayPause}
-              disabled={!hasSpotifyTrack || isThisSongLoading}
+              disabled={!hasTrack || isThisSongLoading}
               className={isThisSongPlaying ? '' : 'animate-pulse-glow'}
               style={{
                 display: 'flex',
@@ -336,25 +337,25 @@ export function MusicPlayer({
                 justifyContent: 'center',
                 width: '56px',
                 height: '56px',
-                background: hasSpotifyTrack
+                background: hasTrack
                   ? (isThisSongPlaying
                       ? 'rgba(255, 255, 255, 0.1)'
                       : 'var(--gradient-primary)')
                   : 'rgba(255, 255, 255, 0.05)',
                 borderRadius: '50%',
-                color: hasSpotifyTrack ? 'white' : 'var(--color-text-muted)',
+                color: hasTrack ? 'white' : 'var(--color-text-muted)',
                 border: isThisSongPlaying ? '2px solid var(--color-primary)' : 'none',
-                cursor: hasSpotifyTrack ? 'pointer' : 'not-allowed',
-                boxShadow: hasSpotifyTrack && !isThisSongPlaying
+                cursor: hasTrack ? 'pointer' : 'not-allowed',
+                boxShadow: hasTrack && !isThisSongPlaying
                   ? '0 4px 20px rgba(16, 185, 129, 0.4)'
                   : 'none',
                 flexShrink: 0,
                 transition: 'transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease'
               }}
-              onMouseDown={e => hasSpotifyTrack && (e.currentTarget.style.transform = 'scale(0.92)')}
+              onMouseDown={e => hasTrack && (e.currentTarget.style.transform = 'scale(0.92)')}
               onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
               onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-              title={!hasSpotifyTrack ? 'No Spotify track available' : isThisSongPlaying ? 'Pause' : 'Play'}
+              title={!hasTrack ? 'No playable track' : isThisSongPlaying ? 'Pause' : 'Play'}
             >
               {isThisSongLoading ? (
                 <Loader2 size={24} className="animate-spin" />

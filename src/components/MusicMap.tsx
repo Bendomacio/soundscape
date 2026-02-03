@@ -3,6 +3,7 @@ import Map, { Marker, NavigationControl, GeolocateControl, Source, Layer } from 
 import type { MapRef } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { SongLocation, MapViewState } from '../types';
+import { hasPlayableLink } from '../types';
 import { Music } from 'lucide-react';
 import { useCachedImage } from '../hooks/useCachedImage';
 
@@ -71,8 +72,8 @@ function AlbumMarker({
   const { src: cachedSrc, isLoading: imgLoading } = useCachedImage(song.albumArt);
   const size = isPlaying ? 64 : isSelected ? 56 : 48;
 
-  // Check if song is valid (has Spotify URI)
-  const isValid = !!song.spotifyUri;
+  // Check if song has any playable link
+  const isValid = hasPlayableLink(song);
 
   // Color scheme based on validity
   const ringColor = isPlaying
@@ -180,7 +181,7 @@ export function MusicMap({
   // Filter songs: non-admins only see valid songs (with Spotify URI)
   const visibleSongs = useMemo(() => {
     if (isAdmin) return songs;
-    return songs.filter(s => !!s.spotifyUri);
+    return songs.filter(s => hasPlayableLink(s));
   }, [songs, isAdmin]);
 
   const inRangeSongIds = useMemo(() => new Set(visibleSongs.map(s => s.id)), [visibleSongs]);
@@ -188,7 +189,7 @@ export function MusicMap({
   // Songs outside range (dimmed) - also filtered by validity for non-admins
   const songsOutOfRange = useMemo(() => {
     if (!allSongs || radius === 0) return [];
-    const filtered = isAdmin ? allSongs : allSongs.filter(s => !!s.spotifyUri);
+    const filtered = isAdmin ? allSongs : allSongs.filter(s => hasPlayableLink(s));
     return filtered.filter(s => !inRangeSongIds.has(s.id));
   }, [allSongs, inRangeSongIds, radius, isAdmin]);
 

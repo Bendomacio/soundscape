@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { X, Music, MapPin, Search, Loader2, Check, AlertCircle } from 'lucide-react';
-import { getTrackInfo, searchTracks } from '../lib/spotify';
+import { searchTracks } from '../lib/spotify';
 import type { SpotifyTrack } from '../lib/spotify';
 import { LocationPicker } from './LocationPicker';
+import { detectProvider, getTrackInfoFromUrl } from '../lib/providers';
+import type { MusicProvider, ProviderLinks } from '../types';
 
 interface SubmitSongModalProps {
   onClose: () => void;
@@ -15,47 +17,30 @@ interface SubmitSongModalProps {
     locationDescription: string;
     spotifyUrl?: string;
     albumArt?: string;
+    providerLinks?: ProviderLinks;
   }) => void;
   userLocation: { latitude: number; longitude: number } | null;
 }
 
-// Extract track ID from various Spotify URL formats
-function extractSpotifyTrackId(input: string): string | null {
-  // Handle spotify:track:xxx format
-  if (input.startsWith('spotify:track:')) {
-    return input.replace('spotify:track:', '');
-  }
-  
-  // Handle https://open.spotify.com/track/xxx format
-  const urlMatch = input.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/);
-  if (urlMatch) {
-    return urlMatch[1];
-  }
-  
-  // Handle just the track ID (22 character alphanumeric)
-  if (/^[a-zA-Z0-9]{22}$/.test(input.trim())) {
-    return input.trim();
-  }
-  
-  return null;
-}
-
-// Check if input looks like a Spotify URL
-function isSpotifyUrl(input: string): boolean {
-  return input.includes('spotify.com/track/') || input.startsWith('spotify:track:');
-}
+// Provider display config
+const PROVIDER_DISPLAY: Record<MusicProvider, { name: string; color: string }> = {
+  spotify: { name: 'Spotify', color: '#1DB954' },
+  youtube: { name: 'YouTube', color: '#FF0000' },
+  apple_music: { name: 'Apple Music', color: '#FC3C44' },
+  soundcloud: { name: 'SoundCloud', color: '#FF5500' }
+};
 
 export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongModalProps) {
   const [step, setStep] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
-  const [spotifyError, setSpotifyError] = useState<string | null>(null);
-  const [spotifySuccess, setSpotifySuccess] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchSuccess, setSearchSuccess] = useState(false);
+  const [detectedProvider, setDetectedProvider] = useState<MusicProvider | null>(null);
   const [formData, setFormData] = useState({
     title: '',
     artist: '',
-    spotifyUrl: '',
-    spotifyTrackId: '',
     albumArt: '',
+    providerLinks: {} as ProviderLinks,
     locationName: '',
     latitude: userLocation?.latitude || 51.5074,
     longitude: userLocation?.longitude || -0.1278,
@@ -80,57 +65,79 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSpotifyFetch = async (url: string) => {
-    setSpotifyError(null);
-    setSpotifySuccess(false);
-    
-    const trackId = extractSpotifyTrackId(url);
-    if (!trackId) {
-      setSpotifyError('Invalid Spotify URL or track ID');
-      return;
+  const handleProviderUrlFetch = async (url: string) => {
+    setSearchError(null);
+    setSearchSuccess(false);
+    setDetectedProvider(null);
+
+    // Detect provider from URL
+    const provider = detectProvider(url);
+    if (!provider) {
+      // Not a recognized provider URL - might be a search query
+      return false;
     }
-    
+
+    setDetectedProvider(provider);
     setIsSearching(true);
-    
+
     try {
-      const trackInfo = await getTrackInfo(trackId);
-      
-      if (trackInfo) {
+      const result = await getTrackInfoFromUrl(url);
+
+      if (result) {
+        // Update provider links
+        const newProviderLinks = { ...formData.providerLinks };
+        if (result.provider === 'spotify') {
+          newProviderLinks.spotify = result.id;
+        } else if (result.provider === 'youtube') {
+          newProviderLinks.youtube = result.id;
+        } else if (result.provider === 'apple_music') {
+          newProviderLinks.appleMusic = result.id;
+        } else if (result.provider === 'soundcloud') {
+          newProviderLinks.soundcloud = result.id;
+        }
+
         setFormData(prev => ({
           ...prev,
-          title: trackInfo.title,
-          artist: trackInfo.artist,
-          albumArt: trackInfo.albumArt,
-          spotifyTrackId: trackId
+          title: result.info.title || prev.title,
+          artist: result.info.artist || prev.artist,
+          albumArt: result.info.albumArt || prev.albumArt,
+          providerLinks: newProviderLinks
         }));
-        setSpotifySuccess(true);
+        setSearchSuccess(true);
+        return true;
       } else {
-        setSpotifyError('Could not fetch track info. Check the URL and try again.');
+        setSearchError(`Could not fetch track info from ${PROVIDER_DISPLAY[provider].name}. Check the URL and try again.`);
+        return true; // Still consumed the input (was a URL)
       }
     } catch {
-      setSpotifyError('Failed to connect to Spotify');
+      setSearchError(`Failed to connect to ${PROVIDER_DISPLAY[provider].name}`);
+      return true;
     } finally {
       setIsSearching(false);
     }
   };
 
   // Handle search input - auto-detect URL vs search query
-  const handleSearchInput = useCallback((input: string) => {
+  const handleSearchInput = useCallback(async (input: string) => {
     setSearchQuery(input);
-    setSpotifyError(null);
-    
+    setSearchError(null);
+
     // Clear previous debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
 
-    // If it looks like a Spotify URL, fetch track info directly
-    if (isSpotifyUrl(input)) {
+    // Check if it's a provider URL
+    const provider = detectProvider(input);
+    if (provider) {
       setSearchResults([]);
       setShowResults(false);
-      handleSpotifyFetch(input);
+      handleProviderUrlFetch(input);
       return;
     }
+
+    // Reset detected provider when not a URL
+    setDetectedProvider(null);
 
     // Reset if empty
     if (!input.trim()) {
@@ -139,7 +146,7 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
       return;
     }
 
-    // Otherwise, search by name (debounced)
+    // Otherwise, search Spotify by name (debounced)
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
@@ -148,30 +155,34 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
         setShowResults(results.length > 0);
       } catch (error) {
         console.error('Search error:', error);
-        setSpotifyError('Search failed. Try pasting a Spotify URL instead.');
+        setSearchError('Search failed. Try pasting a music URL instead.');
       } finally {
         setIsSearching(false);
       }
     }, 300);
-  }, []);
+  }, [formData.providerLinks]);
 
   // Handle selecting a track from search results
   const handleSelectTrack = useCallback((track: SpotifyTrack) => {
     const albumArt = track.album.images[0]?.url || '';
     const artistNames = track.artists.map(a => a.name).join(', ');
-    
+
     setFormData(prev => ({
       ...prev,
       title: track.name,
       artist: artistNames,
       albumArt: albumArt,
-      spotifyTrackId: track.id
+      providerLinks: {
+        ...prev.providerLinks,
+        spotify: track.id
+      }
     }));
-    
+
     setSearchQuery(`${track.name} - ${artistNames}`);
     setSearchResults([]);
     setShowResults(false);
-    setSpotifySuccess(true);
+    setSearchSuccess(true);
+    setDetectedProvider('spotify');
   }, []);
 
   // Clear selection
@@ -179,18 +190,24 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);
-    setSpotifySuccess(false);
+    setSearchSuccess(false);
+    setDetectedProvider(null);
     setFormData(prev => ({
       ...prev,
       title: '',
       artist: '',
       albumArt: '',
-      spotifyTrackId: ''
+      providerLinks: {}
     }));
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Build spotifyUrl for backwards compatibility
+    const spotifyId = formData.providerLinks.spotify;
+    const spotifyUrl = spotifyId ? `spotify:track:${spotifyId.replace('spotify:track:', '')}` : undefined;
+
     onSubmit({
       title: formData.title,
       artist: formData.artist,
@@ -198,25 +215,43 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
       latitude: formData.latitude,
       longitude: formData.longitude,
       locationDescription: formData.locationDescription,
-      spotifyUrl: formData.spotifyTrackId ? `spotify:track:${formData.spotifyTrackId}` : undefined,
-      albumArt: formData.albumArt || undefined
+      spotifyUrl,
+      albumArt: formData.albumArt || undefined,
+      providerLinks: Object.keys(formData.providerLinks).length > 0 ? formData.providerLinks : undefined
     });
     onClose();
+  };
+
+  // Get the border color based on detected provider
+  const getBorderColor = () => {
+    if (searchError) return '#ef4444';
+    if (searchSuccess && detectedProvider) {
+      return PROVIDER_DISPLAY[detectedProvider].color;
+    }
+    return undefined;
+  };
+
+  // Get the status icon color
+  const getStatusColor = () => {
+    if (searchSuccess && detectedProvider) {
+      return PROVIDER_DISPLAY[detectedProvider].color;
+    }
+    return '#1DB954'; // Default to Spotify green for search
   };
 
   return (
     <div className="modal">
       {/* Backdrop */}
       <div className="modal-backdrop" onClick={onClose} />
-      
+
       {/* Modal */}
       <div className="modal-content" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
-            <div style={{ 
-              width: '44px', 
-              height: '44px', 
+            <div style={{
+              width: '44px',
+              height: '44px',
               borderRadius: 'var(--radius-lg)',
               background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-secondary))',
               display: 'flex',
@@ -238,9 +273,9 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
         </div>
 
         {/* Steps indicator */}
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
           gap: 'var(--space-sm)',
           padding: 'var(--space-md) var(--space-xl)',
           background: 'var(--color-dark-lighter)',
@@ -263,16 +298,16 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
               }}>
                 {s}
               </div>
-              <span style={{ 
-                fontSize: 'var(--text-sm)', 
-                color: step >= s ? 'var(--color-text)' : 'var(--color-text-muted)' 
+              <span style={{
+                fontSize: 'var(--text-sm)',
+                color: step >= s ? 'var(--color-text)' : 'var(--color-text-muted)'
               }}>
                 {s === 1 ? 'Song' : 'Location'}
               </span>
               {s < 2 && (
-                <div style={{ 
-                  width: '40px', 
-                  height: '2px', 
+                <div style={{
+                  width: '40px',
+                  height: '2px',
                   marginLeft: 'var(--space-sm)',
                   marginRight: 'var(--space-sm)',
                   background: step > s ? 'var(--color-primary)' : 'var(--color-dark-card)',
@@ -288,11 +323,11 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
         <form onSubmit={handleSubmit} className="modal-body">
           {step === 1 ? (
             <>
-              {/* Spotify search input */}
+              {/* Music search input - multi-provider */}
               <div className="form-group" ref={searchRef} style={{ position: 'relative' }}>
                 <label className="label" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                   <Search size={14} />
-                  Search Spotify
+                  Search or Paste URL
                 </label>
                 <div style={{ position: 'relative' }}>
                   <input
@@ -300,30 +335,35 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                     value={searchQuery}
                     onChange={(e) => handleSearchInput(e.target.value)}
                     onFocus={() => searchResults.length > 0 && setShowResults(true)}
-                    placeholder="Search by song name or paste Spotify URL..."
+                    placeholder="Search by name or paste Spotify, YouTube, Apple Music, or SoundCloud URL..."
                     className="input"
-                    style={{ 
+                    style={{
                       paddingRight: '44px',
-                      borderColor: spotifySuccess ? '#1DB954' : spotifyError ? '#ef4444' : undefined
+                      borderColor: getBorderColor()
                     }}
                   />
-                  <div style={{ 
-                    position: 'absolute', 
-                    right: '12px', 
-                    top: '50%', 
+                  <div style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
                     transform: 'translateY(-50%)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 'var(--space-xs)'
                   }}>
-                    {isSearching && <Loader2 size={18} className="animate-spin" style={{ color: '#1DB954' }} />}
-                    {spotifySuccess && !isSearching && <Check size={18} style={{ color: '#1DB954' }} />}
-                    {spotifyError && !isSearching && <AlertCircle size={18} style={{ color: '#ef4444' }} />}
+                    {isSearching && <Loader2 size={18} className="animate-spin" style={{ color: getStatusColor() }} />}
+                    {searchSuccess && !isSearching && <Check size={18} style={{ color: getStatusColor() }} />}
+                    {searchError && !isSearching && <AlertCircle size={18} style={{ color: '#ef4444' }} />}
                   </div>
                 </div>
-                {spotifyError && (
+                {searchError && (
                   <p style={{ fontSize: 'var(--text-xs)', color: '#ef4444', marginTop: 'var(--space-xs)' }}>
-                    {spotifyError}
+                    {searchError}
+                  </p>
+                )}
+                {detectedProvider && searchSuccess && (
+                  <p style={{ fontSize: 'var(--text-xs)', color: PROVIDER_DISPLAY[detectedProvider].color, marginTop: 'var(--space-xs)' }}>
+                    {PROVIDER_DISPLAY[detectedProvider].name} link detected
                   </p>
                 )}
 
@@ -370,19 +410,19 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                           e.currentTarget.style.background = 'none';
                         }}
                       >
-                        <img 
-                          src={track.album.images[track.album.images.length - 1]?.url || track.album.images[0]?.url} 
+                        <img
+                          src={track.album.images[track.album.images.length - 1]?.url || track.album.images[0]?.url}
                           alt=""
-                          style={{ 
-                            width: '40px', 
-                            height: '40px', 
+                          style={{
+                            width: '40px',
+                            height: '40px',
                             borderRadius: 'var(--radius-sm)',
                             objectFit: 'cover',
                             flexShrink: 0
                           }}
                         />
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ 
+                          <p style={{
                             fontWeight: 'var(--font-medium)',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -390,8 +430,8 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                           }}>
                             {track.name}
                           </p>
-                          <p style={{ 
-                            fontSize: 'var(--text-xs)', 
+                          <p style={{
+                            fontSize: 'var(--text-xs)',
                             color: 'var(--color-text-muted)',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -407,30 +447,30 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
               </div>
 
               {/* Selected track preview */}
-              {spotifySuccess && formData.albumArt && (
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+              {searchSuccess && formData.albumArt && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: 'var(--space-md)',
                   padding: 'var(--space-md)',
                   background: 'var(--color-dark-lighter)',
                   borderRadius: 'var(--radius-lg)',
                   marginBottom: 'var(--space-md)',
-                  border: '1px solid #1DB954'
+                  border: `1px solid ${detectedProvider ? PROVIDER_DISPLAY[detectedProvider].color : '#1DB954'}`
                 }}>
-                  <img 
-                    src={formData.albumArt} 
+                  <img
+                    src={formData.albumArt}
                     alt="Album art"
-                    style={{ 
-                      width: '64px', 
-                      height: '64px', 
+                    style={{
+                      width: '64px',
+                      height: '64px',
                       borderRadius: 'var(--radius-md)',
                       objectFit: 'cover'
                     }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ 
-                      fontWeight: 'var(--font-semibold)', 
+                    <p style={{
+                      fontWeight: 'var(--font-semibold)',
                       color: 'var(--color-text)',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -438,8 +478,8 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                     }}>
                       {formData.title}
                     </p>
-                    <p style={{ 
-                      fontSize: 'var(--text-sm)', 
+                    <p style={{
+                      fontSize: 'var(--text-sm)',
                       color: 'var(--color-text-muted)',
                       marginTop: '2px',
                       overflow: 'hidden',
@@ -448,6 +488,15 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                     }}>
                       {formData.artist}
                     </p>
+                    {detectedProvider && (
+                      <p style={{
+                        fontSize: 'var(--text-xs)',
+                        color: PROVIDER_DISPLAY[detectedProvider].color,
+                        marginTop: '4px'
+                      }}>
+                        via {PROVIDER_DISPLAY[detectedProvider].name}
+                      </p>
+                    )}
                   </div>
                   <button
                     type="button"
@@ -468,9 +517,9 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                 </div>
               )}
 
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: 'var(--space-lg)',
                 margin: 'var(--space-lg) 0'
               }}>
@@ -541,10 +590,10 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                 <LocationPicker
                   latitude={formData.latitude}
                   longitude={formData.longitude}
-                  onChange={(lat, lng) => setFormData(prev => ({ 
-                    ...prev, 
-                    latitude: lat, 
-                    longitude: lng 
+                  onChange={(lat, lng) => setFormData(prev => ({
+                    ...prev,
+                    latitude: lat,
+                    longitude: lng
                   }))}
                 />
               </div>
@@ -575,7 +624,7 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
                   type="submit"
                   disabled={!formData.locationName}
                   className="btn"
-                  style={{ 
+                  style={{
                     flex: 1,
                     background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-secondary))',
                     color: 'var(--color-dark)'

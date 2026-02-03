@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { 
-  X, 
-  Search, 
-  Edit2, 
-  Trash2, 
-  CheckCircle, 
+import {
+  X,
+  Search,
+  Trash2,
+  CheckCircle,
   MapPin,
   Music,
   ExternalLink,
@@ -19,14 +18,40 @@ import {
   MessageSquare,
   Send,
   RefreshCw,
-  User
+  User,
+  Link2
 } from 'lucide-react';
 import { SpotifySearch } from './SpotifySearch';
-import type { SongLocation, SongPhoto, SongStatus } from '../types';
+import type { SongLocation, SongPhoto, SongStatus, MusicProvider, ProviderLinks } from '../types';
 import type { SpotifyTrack } from '../lib/spotify';
 import { getTrackInfo } from '../lib/spotify';
 import { getPendingPhotos, approvePhoto, rejectPhoto } from '../lib/comments';
 import { setSongStatus, fetchAllSongsAdmin } from '../lib/songs';
+import { detectProvider, extractProviderId } from '../lib/providers';
+
+// Provider display config
+const PROVIDER_CONFIG: Record<MusicProvider, { name: string; color: string; placeholder: string }> = {
+  spotify: {
+    name: 'Spotify',
+    color: '#1DB954',
+    placeholder: 'spotify:track:xxx or open.spotify.com/track/xxx'
+  },
+  youtube: {
+    name: 'YouTube',
+    color: '#FF0000',
+    placeholder: 'youtube.com/watch?v=xxx or youtu.be/xxx'
+  },
+  apple_music: {
+    name: 'Apple Music',
+    color: '#FC3C44',
+    placeholder: 'music.apple.com/.../song/xxx'
+  },
+  soundcloud: {
+    name: 'SoundCloud',
+    color: '#FF5500',
+    placeholder: 'soundcloud.com/artist/track'
+  }
+};
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -41,12 +66,27 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSong, setEditingSong] = useState<SongLocation | null>(null);
   const [showSpotifySearch, setShowSpotifySearch] = useState(false);
+  const [showProviderEditor, setShowProviderEditor] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'songs' | 'review' | 'photos'>('songs');
   const [pendingPhotos, setPendingPhotos] = useState<SongPhoto[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState<string | null>(null);
-  
+
+  // Multi-provider editing state
+  const [providerInputs, setProviderInputs] = useState<Record<MusicProvider, string>>({
+    spotify: '',
+    youtube: '',
+    apple_music: '',
+    soundcloud: ''
+  });
+  const [providerValidation, setProviderValidation] = useState<Record<MusicProvider, 'valid' | 'invalid' | 'empty'>>({
+    spotify: 'empty',
+    youtube: 'empty',
+    apple_music: 'empty',
+    soundcloud: 'empty'
+  });
+
   // Review state
   const [allSongs, setAllSongs] = useState<SongLocation[]>([]);
   const [loadingAllSongs, setLoadingAllSongs] = useState(false);
@@ -152,7 +192,92 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
     return 'valid';
   };
 
-  const linkedCount = songs.filter(s => s.spotifyUri).length;
+  // Open provider editor for a song
+  const openProviderEditor = (song: SongLocation) => {
+    setEditingSong(song);
+    // Populate inputs with existing links
+    const spotifyId = song.spotifyUri?.replace('spotify:track:', '') ||
+                      song.providerLinks?.spotify?.replace('spotify:track:', '') || '';
+    setProviderInputs({
+      spotify: spotifyId ? `spotify:track:${spotifyId}` : '',
+      youtube: song.providerLinks?.youtube || '',
+      apple_music: song.providerLinks?.appleMusic || '',
+      soundcloud: song.providerLinks?.soundcloud || ''
+    });
+    // Validate existing inputs
+    setProviderValidation({
+      spotify: spotifyId ? 'valid' : 'empty',
+      youtube: song.providerLinks?.youtube ? 'valid' : 'empty',
+      apple_music: song.providerLinks?.appleMusic ? 'valid' : 'empty',
+      soundcloud: song.providerLinks?.soundcloud ? 'valid' : 'empty'
+    });
+    setShowProviderEditor(true);
+  };
+
+  // Handle provider input change with validation
+  const handleProviderInputChange = (provider: MusicProvider, value: string) => {
+    setProviderInputs(prev => ({ ...prev, [provider]: value }));
+
+    if (!value.trim()) {
+      setProviderValidation(prev => ({ ...prev, [provider]: 'empty' }));
+      return;
+    }
+
+    // Validate by trying to extract ID
+    const detected = detectProvider(value);
+    if (detected === provider) {
+      const extracted = extractProviderId(value);
+      if (extracted) {
+        setProviderValidation(prev => ({ ...prev, [provider]: 'valid' }));
+        return;
+      }
+    }
+
+    setProviderValidation(prev => ({ ...prev, [provider]: 'invalid' }));
+  };
+
+  // Save provider links
+  const saveProviderLinks = async () => {
+    if (!editingSong) return;
+
+    setIsUpdating(editingSong.id);
+
+    // Build provider links from inputs
+    const providerLinks: ProviderLinks = {};
+
+    // Extract IDs from validated inputs
+    if (providerValidation.spotify === 'valid' && providerInputs.spotify) {
+      const extracted = extractProviderId(providerInputs.spotify);
+      if (extracted) providerLinks.spotify = extracted.id;
+    }
+    if (providerValidation.youtube === 'valid' && providerInputs.youtube) {
+      const extracted = extractProviderId(providerInputs.youtube);
+      if (extracted) providerLinks.youtube = extracted.id;
+    }
+    if (providerValidation.apple_music === 'valid' && providerInputs.apple_music) {
+      const extracted = extractProviderId(providerInputs.apple_music);
+      if (extracted) providerLinks.appleMusic = extracted.id;
+    }
+    if (providerValidation.soundcloud === 'valid' && providerInputs.soundcloud) {
+      const extracted = extractProviderId(providerInputs.soundcloud);
+      if (extracted) providerLinks.soundcloud = extracted.id;
+    }
+
+    // Build spotifyUri for backwards compatibility
+    const spotifyUri = providerLinks.spotify ? `spotify:track:${providerLinks.spotify}` : editingSong.spotifyUri;
+
+    onUpdateSong(editingSong.id, {
+      spotifyUri,
+      providerLinks: Object.keys(providerLinks).length > 0 ? providerLinks : undefined
+    });
+
+    setShowProviderEditor(false);
+    setEditingSong(null);
+    setIsUpdating(null);
+  };
+
+  // Count songs with any provider link
+  const linkedCount = songs.filter(s => s.spotifyUri || s.providerLinks?.youtube || s.providerLinks?.appleMusic || s.providerLinks?.soundcloud).length;
 
   return (
     <div style={{
@@ -499,23 +624,39 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                         <Loader size={18} className="animate-spin" color="var(--color-primary)" />
                       </div>
                     ) : (
-                      <button
-                        onClick={() => {
-                          setEditingSong(song);
-                          setShowSpotifySearch(true);
-                        }}
-                        title="Fix Spotify link"
-                        style={{
-                          padding: '10px',
-                          background: 'none',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                          color: 'var(--color-primary)'
-                        }}
-                      >
-                        <Edit2 size={18} />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openProviderEditor(song)}
+                          title="Edit music links"
+                          style={{
+                            padding: '10px',
+                            background: 'none',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            color: 'var(--color-primary)'
+                          }}
+                        >
+                          <Link2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingSong(song);
+                            setShowSpotifySearch(true);
+                          }}
+                          title="Search Spotify"
+                          style={{
+                            padding: '10px',
+                            background: 'none',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            color: '#1DB954'
+                          }}
+                        >
+                          <Search size={18} />
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => {
@@ -942,7 +1083,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           flexShrink: 0
         }}>
           <span style={{ whiteSpace: 'nowrap' }}>{songs.length} total songs</span>
-          <span style={{ whiteSpace: 'nowrap' }}>{linkedCount} linked to Spotify</span>
+          <span style={{ whiteSpace: 'nowrap' }}>{linkedCount} with music links</span>
         </div>
       </div>
 
@@ -956,6 +1097,204 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
         onSelect={handleSpotifySelect}
         initialQuery={editingSong ? `${editingSong.title} ${editingSong.artist}` : ''}
       />
+
+      {/* Provider Links Editor Modal */}
+      {showProviderEditor && editingSong && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          zIndex: 10000
+        }}>
+          {/* Backdrop */}
+          <div
+            onClick={() => {
+              setShowProviderEditor(false);
+              setEditingSong(null);
+            }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.8)'
+            }}
+          />
+
+          {/* Modal */}
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '500px',
+              background: 'var(--color-dark-card)',
+              borderRadius: '16px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '20px 24px',
+              borderBottom: '1px solid var(--color-dark-lighter)'
+            }}>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, margin: 0 }}>
+                  Edit Music Links
+                </h3>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '4px 0 0 0' }}>
+                  {editingSong.title} - {editingSong.artist}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowProviderEditor(false);
+                  setEditingSong(null);
+                }}
+                style={{
+                  padding: '8px',
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-muted)'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Provider inputs */}
+            <div style={{ padding: '20px 24px' }}>
+              {(Object.keys(PROVIDER_CONFIG) as MusicProvider[]).map(provider => {
+                const config = PROVIDER_CONFIG[provider];
+                const validation = providerValidation[provider];
+                const hasInput = providerInputs[provider].trim() !== '';
+
+                return (
+                  <div key={provider} style={{ marginBottom: '16px' }}>
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: 'var(--color-text)',
+                      marginBottom: '6px'
+                    }}>
+                      <span style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: config.color
+                      }} />
+                      {config.name}
+                      {validation === 'valid' && (
+                        <Check size={14} style={{ color: config.color, marginLeft: 'auto' }} />
+                      )}
+                      {validation === 'invalid' && hasInput && (
+                        <AlertCircle size={14} style={{ color: '#ef4444', marginLeft: 'auto' }} />
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={providerInputs[provider]}
+                      onChange={(e) => handleProviderInputChange(provider, e.target.value)}
+                      placeholder={config.placeholder}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        background: 'var(--color-dark-lighter)',
+                        border: `1px solid ${
+                          validation === 'valid' ? config.color :
+                          validation === 'invalid' && hasInput ? '#ef4444' :
+                          'transparent'
+                        }`,
+                        borderRadius: '8px',
+                        color: 'var(--color-text)',
+                        fontSize: '14px',
+                        outline: 'none'
+                      }}
+                    />
+                    {validation === 'invalid' && hasInput && (
+                      <p style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px' }}>
+                        Invalid {config.name} URL or ID
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              padding: '16px 24px',
+              borderTop: '1px solid var(--color-dark-lighter)'
+            }}>
+              <button
+                onClick={() => {
+                  setShowProviderEditor(false);
+                  setEditingSong(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: 'var(--color-dark-lighter)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'var(--color-text)',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveProviderLinks}
+                disabled={isUpdating === editingSong.id}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: 'var(--color-primary)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                {isUpdating === editingSong.id ? (
+                  <Loader size={16} className="animate-spin" />
+                ) : (
+                  <>
+                    <Check size={16} />
+                    Save Links
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

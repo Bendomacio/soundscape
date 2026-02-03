@@ -1,5 +1,15 @@
 export type SongStatus = 'live' | 'needs_edit' | 'removed';
 
+// Music provider types
+export type MusicProvider = 'spotify' | 'youtube' | 'apple_music' | 'soundcloud';
+
+export interface ProviderLinks {
+  spotify?: string;       // spotify:track:XXXXX or track ID
+  youtube?: string;       // YouTube video ID
+  appleMusic?: string;    // Apple Music song ID
+  soundcloud?: string;    // Full SoundCloud URL
+}
+
 export interface SongLocation {
   id: string;
   title: string;
@@ -8,6 +18,8 @@ export interface SongLocation {
   albumArt?: string;
   spotifyUri?: string;
   spotifyPreviewUrl?: string;
+  // Multi-provider support
+  providerLinks?: ProviderLinks;
   latitude: number;
   longitude: number;
   locationName: string;
@@ -82,4 +94,14 @@ export interface MapViewState {
   zoom: number;
   pitch?: number;
   bearing?: number;
+}
+
+// Helper function: Check if a song has any playable link
+export function hasPlayableLink(song: SongLocation): boolean {
+  if (song.spotifyUri) return true;
+  if (song.providerLinks) {
+    const { spotify, youtube, appleMusic, soundcloud } = song.providerLinks;
+    return !!(spotify || youtube || appleMusic || soundcloud);
+  }
+  return false;
 }

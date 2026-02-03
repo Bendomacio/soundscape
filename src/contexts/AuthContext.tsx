@@ -17,11 +17,14 @@ interface AuthContextType {
   session: Session | null;
   isAdmin: boolean;
   isLoading: boolean;
+  isDevMode: boolean;
+  isDevSession: boolean; // True when logged in via devLogin (no DB persistence)
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signInWithProvider: (provider: Provider) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  devLogin: (type: 'admin' | 'user') => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDevSession, setIsDevSession] = useState(false);
   
   // Use refs to track initialization state (survives re-renders, no closure issues)
   const isInitialized = useRef(false);
@@ -259,6 +263,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setSession(null);
     setIsAdmin(false);
+    setIsDevSession(false);
+  }
+
+  // Dev-only login for local testing (bypasses Supabase auth)
+  const isDevMode = import.meta.env.DEV && window.location.hostname === 'localhost';
+
+  function devLogin(type: 'admin' | 'user'): void {
+    if (!isDevMode) {
+      logger.warn('Dev login attempted in production - ignored');
+      return;
+    }
+
+    const mockUsers = {
+      admin: {
+        user: {
+          id: '00000000-0000-0000-0000-000000000001',
+          email: 'testadmin@soundscape.dev',
+          app_metadata: {},
+          user_metadata: { display_name: 'Test Admin' },
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as User,
+        profile: {
+          id: '00000000-0000-0000-0000-000000000001',
+          email: 'testadmin@soundscape.dev',
+          display_name: 'Test Admin',
+          avatar_url: null,
+          is_admin: true,
+        } as Profile,
+      },
+      user: {
+        user: {
+          id: '00000000-0000-0000-0000-000000000002',
+          email: 'testuser@soundscape.dev',
+          app_metadata: {},
+          user_metadata: { display_name: 'Test User' },
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        } as User,
+        profile: {
+          id: '00000000-0000-0000-0000-000000000002',
+          email: 'testuser@soundscape.dev',
+          display_name: 'Test User',
+          avatar_url: null,
+          is_admin: false,
+        } as Profile,
+      },
+    };
+
+    const mock = mockUsers[type];
+    setUser(mock.user);
+    setProfile(mock.profile);
+    setIsAdmin(mock.profile.is_admin);
+    setSession(null); // No real session in dev mode
+    setIsDevSession(true); // Flag that this is a dev session (no DB persistence)
+    logger.debug(`Dev login as ${type}: ${mock.profile.display_name}`);
   }
 
   return (
@@ -268,11 +328,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isAdmin,
       isLoading,
+      isDevMode,
+      isDevSession,
       signInWithEmail,
       signUpWithEmail,
       signInWithProvider,
       signOut,
-      refreshProfile
+      refreshProfile,
+      devLogin,
     }}>
       {children}
     </AuthContext.Provider>

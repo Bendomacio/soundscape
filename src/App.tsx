@@ -15,7 +15,8 @@ import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlaye
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
 import { getTrackInfo, handleSpotifyCallback } from './lib/spotify';
 import { preloadImages, clearOldCache } from './lib/imageCache';
-import type { SongLocation, MapViewState } from './types';
+import type { SongLocation, MapViewState, ProviderLinks } from './types';
+import { hasPlayableLink } from './types';
 
 // Handle Spotify OAuth callback
 function SpotifyCallbackHandler() {
@@ -448,8 +449,8 @@ function AppContent() {
   }, []);
 
   const handleShuffle = useCallback(() => {
-    // Only shuffle songs with valid Spotify links
-    const playableSongs = songsInRadius.filter(s => s.spotifyUri);
+    // Only shuffle songs with any playable link
+    const playableSongs = songsInRadius.filter(s => hasPlayableLink(s));
     if (playableSongs.length === 0) return;
     
     const randomIndex = Math.floor(Math.random() * playableSongs.length);
@@ -469,6 +470,7 @@ function AppContent() {
     locationDescription: string;
     spotifyUrl?: string;
     albumArt?: string;
+    providerLinks?: ProviderLinks;
   }) => {
     const newSong: SongLocation = {
       id: `user-${Date.now()}`,
@@ -484,7 +486,8 @@ function AppContent() {
       verified: false,
       userId: user?.id,
       submittedBy: profile?.display_name || user?.email || 'Anonymous',
-      submittedAt: new Date()
+      submittedAt: new Date(),
+      providerLinks: data.providerLinks
     };
     
     // Update local state immediately

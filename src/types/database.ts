@@ -12,6 +12,10 @@ export interface DbSongRow {
   album: string | null;
   album_art: string | null;
   spotify_uri: string | null;
+  // Multi-provider support
+  youtube_id: string | null;
+  apple_music_id: string | null;
+  soundcloud_url: string | null;
   latitude: number;
   longitude: number;
   location_name: string;
