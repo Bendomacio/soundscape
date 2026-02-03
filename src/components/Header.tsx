@@ -403,7 +403,10 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                   </p>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {(Object.keys(PROVIDER_CONFIG) as MusicProvider[]).map(provider => {
+                    {(Object.keys(PROVIDER_CONFIG) as MusicProvider[])
+                      // Hide Apple Music - requires paid Apple Developer account ($99/year)
+                      .filter(provider => provider !== 'apple_music')
+                      .map(provider => {
                       const config = PROVIDER_CONFIG[provider];
                       const conn = providerConnections[provider];
                       const isSpotify = provider === 'spotify';
