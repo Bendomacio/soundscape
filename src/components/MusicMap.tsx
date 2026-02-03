@@ -19,8 +19,11 @@ interface MusicMapProps {
   radius: number;
   viewState: MapViewState;
   onViewStateChange: (viewState: MapViewState) => void;
-  discoveryMode?: 'nearby' | 'explore';
+  discoveryMode?: 'nearby' | 'explore' | 'trip';
   discoveryCenter?: { latitude: number; longitude: number } | null;
+  // Trip mode props
+  tripRoute?: [number, number][] | null;
+  tripDestination?: { lat: number; lng: number; name: string } | null;
 }
 
 // Generate circle GeoJSON for radius visualization
@@ -173,7 +176,9 @@ export function MusicMap({
   viewState,
   onViewStateChange,
   discoveryMode = 'nearby',
-  discoveryCenter
+  discoveryCenter,
+  tripRoute,
+  tripDestination
 }: MusicMapProps) {
   const mapRef = useRef<MapRef>(null);
 
@@ -192,6 +197,19 @@ export function MusicMap({
     return createCircleGeoJSON(discoveryCenter.latitude, discoveryCenter.longitude, radius);
   }, [discoveryCenter, radius]);
 
+  // Generate trip route GeoJSON
+  const tripRouteGeoJSON = useMemo(() => {
+    if (!tripRoute || tripRoute.length === 0) return null;
+    return {
+      type: 'Feature' as const,
+      properties: {},
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: tripRoute
+      }
+    };
+  }, [tripRoute]);
+
   // Fly to song when selected
   useEffect(() => {
     if (selectedSong && mapRef.current) {
@@ -208,7 +226,7 @@ export function MusicMap({
   }, [onViewStateChange]);
 
   // Colors based on discovery mode
-  const circleColor = discoveryMode === 'nearby' ? '#10b981' : '#8b5cf6';
+  const circleColor = discoveryMode === 'nearby' ? '#10b981' : discoveryMode === 'trip' ? '#f59e0b' : '#8b5cf6';
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
@@ -247,6 +265,53 @@ export function MusicMap({
               }}
             />
           </Source>
+        )}
+
+        {/* Trip route visualization */}
+        {tripRouteGeoJSON && discoveryMode === 'trip' && (
+          <Source id="trip-route" type="geojson" data={tripRouteGeoJSON}>
+            {/* Route glow */}
+            <Layer
+              id="trip-route-glow"
+              type="line"
+              paint={{
+                'line-color': '#f59e0b',
+                'line-width': 8,
+                'line-opacity': 0.3,
+                'line-blur': 3
+              }}
+            />
+            {/* Route line */}
+            <Layer
+              id="trip-route-line"
+              type="line"
+              paint={{
+                'line-color': '#f59e0b',
+                'line-width': 4,
+                'line-opacity': 0.9
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Trip destination marker */}
+        {discoveryMode === 'trip' && tripDestination && (
+          <Marker latitude={tripDestination.lat} longitude={tripDestination.lng}>
+            <div style={{
+              width: 32,
+              height: 32,
+              background: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+              borderRadius: '50% 50% 50% 0',
+              transform: 'rotate(-45deg)',
+              border: '3px solid white',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ transform: 'rotate(45deg)', fontSize: '14px' }}>📍</span>
+            </div>
+          </Marker>
         )}
 
         {/* Discovery center marker (for explore mode) */}

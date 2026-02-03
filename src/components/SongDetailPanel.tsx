@@ -30,7 +30,11 @@ import { LoadingSpinner, UserAvatar, EmptyState } from './ui';
 interface SongDetailPanelProps {
   song: SongLocation;
   onClose: () => void;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
+
+// Detect mobile device
+const isMobile = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // Fallback image for failed loads
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop';
@@ -78,7 +82,7 @@ function useDominantColor(imageUrl: string): string {
   return color;
 }
 
-export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
+export function SongDetailPanel({ song, onClose, userLocation }: SongDetailPanelProps) {
   const [albumImgError, setAlbumImgError] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(song.upvotes || 0);
@@ -679,42 +683,61 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
             {/* Info Tab - Mini map and navigation */}
             {activeTab === 'info' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {/* Mini Map Preview */}
+                {/* Map Preview - Show directions on mobile with user location */}
                 <div style={{
                   position: 'relative',
                   borderRadius: '12px',
                   overflow: 'hidden',
                   background: 'var(--color-dark-lighter)'
                 }}>
-                  <img
-                    src={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+10b981(${song.longitude},${song.latitude})/${song.longitude},${song.latitude},15,0/400x200@2x?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`}
-                    alt={`Map of ${song.locationName}`}
-                    style={{
-                      width: '100%',
-                      height: '150px',
-                      objectFit: 'cover',
-                      display: 'block'
-                    }}
-                  />
-                  {/* Coordinates overlay */}
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '8px',
-                    left: '8px',
-                    background: 'rgba(0,0,0,0.7)',
-                    padding: '4px 8px',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    color: 'var(--color-text-muted)',
-                    fontFamily: 'monospace'
-                  }}>
-                    {song.latitude.toFixed(5)}, {song.longitude.toFixed(5)}
-                  </div>
+                  {isMobile() && userLocation ? (
+                    // Mobile: Embedded Google Maps with directions route (no API key needed)
+                    <iframe
+                      src={`https://www.google.com/maps?saddr=${userLocation.latitude},${userLocation.longitude}&daddr=${song.latitude},${song.longitude}&dirflg=w&output=embed`}
+                      style={{
+                        width: '100%',
+                        height: '200px',
+                        border: 'none',
+                        display: 'block'
+                      }}
+                      allowFullScreen
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                  ) : (
+                    // Desktop: Static Mapbox map
+                    <>
+                      <img
+                        src={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+10b981(${song.longitude},${song.latitude})/${song.longitude},${song.latitude},15,0/400x200@2x?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`}
+                        alt={`Map of ${song.locationName}`}
+                        style={{
+                          width: '100%',
+                          height: '150px',
+                          objectFit: 'cover',
+                          display: 'block'
+                        }}
+                      />
+                      {/* Coordinates overlay */}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '8px',
+                        left: '8px',
+                        background: 'rgba(0,0,0,0.7)',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        fontSize: '11px',
+                        color: 'var(--color-text-muted)',
+                        fontFamily: 'monospace'
+                      }}>
+                        {song.latitude.toFixed(5)}, {song.longitude.toFixed(5)}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Action Buttons */}
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {/* Get Directions */}
+                  {/* Get Directions - opens full Google Maps */}
                   <button
                     onClick={handleGetDirections}
                     style={{
@@ -735,7 +758,7 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                     }}
                   >
                     <Navigation size={18} />
-                    Get Directions
+                    {isMobile() ? 'Open in Maps' : 'Get Directions'}
                   </button>
 
                   {/* Street View */}
@@ -770,7 +793,9 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
                   margin: 0,
                   opacity: 0.7
                 }}>
-                  Tap "Get Directions" to navigate to this song's location
+                  {isMobile() && userLocation
+                    ? 'Route shown from your current location'
+                    : 'Tap "Get Directions" to navigate to this song\'s location'}
                 </p>
               </div>
             )}

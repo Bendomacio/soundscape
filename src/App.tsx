@@ -127,8 +127,14 @@ function AppContent() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showMySubmissions, setShowMySubmissions] = useState(false);
   const [radius, setRadius] = useState(5);
-  const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore'>('nearby');
-  
+  const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore' | 'trip'>('nearby');
+
+  // Trip mode state
+  const [tripDestination, setTripDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
+  const [tripRoute, setTripRoute] = useState<[number, number][] | null>(null);
+  const [tripSongsOnRoute, setTripSongsOnRoute] = useState<SongLocation[]>([]);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+
   // User location (default to central London)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>({
     latitude: 51.5074,
@@ -308,6 +314,131 @@ function AppContent() {
     return R * c;
   }
 
+  // Calculate perpendicular distance from a point to a line segment
+  function pointToSegmentDistance(
+    pointLat: number,
+    pointLng: number,
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+  ): number {
+    const A = pointLat - lat1;
+    const B = pointLng - lng1;
+    const C = lat2 - lat1;
+    const D = lng2 - lng1;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+
+    let param = -1;
+    if (lenSq !== 0) {
+      param = dot / lenSq;
+    }
+
+    let nearestLat: number;
+    let nearestLng: number;
+
+    if (param < 0) {
+      nearestLat = lat1;
+      nearestLng = lng1;
+    } else if (param > 1) {
+      nearestLat = lat2;
+      nearestLng = lng2;
+    } else {
+      nearestLat = lat1 + param * C;
+      nearestLng = lng1 + param * D;
+    }
+
+    return getDistanceKm(pointLat, pointLng, nearestLat, nearestLng);
+  }
+
+  // Calculate minimum distance from a point to a route (polyline)
+  function getMinDistanceToRoute(
+    pointLat: number,
+    pointLng: number,
+    route: [number, number][]
+  ): number {
+    let minDistance = Infinity;
+
+    // Check distance to each segment of the route
+    for (let i = 0; i < route.length - 1; i++) {
+      const [lng1, lat1] = route[i];
+      const [lng2, lat2] = route[i + 1];
+
+      const dist = pointToSegmentDistance(pointLat, pointLng, lat1, lng1, lat2, lng2);
+      if (dist < minDistance) {
+        minDistance = dist;
+      }
+    }
+
+    return minDistance;
+  }
+
+  // Handle trip destination selection
+  const handleTripDestinationSet = useCallback(async (destination: { lat: number; lng: number; name: string }) => {
+    if (!userLocation) return;
+
+    setTripDestination(destination);
+    setIsLoadingRoute(true);
+
+    try {
+      // Fetch route from Mapbox Directions API
+      const response = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/walking/${userLocation.longitude},${userLocation.latitude};${destination.lng},${destination.lat}?geometries=geojson&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`
+      );
+      const data = await response.json();
+
+      if (data.routes && data.routes[0]) {
+        const routeCoords = data.routes[0].geometry.coordinates as [number, number][];
+        setTripRoute(routeCoords);
+
+        // Find songs within 500m of the route
+        const ROUTE_BUFFER_KM = 0.5; // 500 meters
+        const songsOnRoute = songs.filter(song => {
+          const distance = getMinDistanceToRoute(song.latitude, song.longitude, routeCoords);
+          console.log(`Song "${song.title}" distance to route: ${(distance * 1000).toFixed(0)}m`);
+          return distance <= ROUTE_BUFFER_KM;
+        });
+        console.log(`Found ${songsOnRoute.length} songs within ${ROUTE_BUFFER_KM * 1000}m of route`);
+
+        // Sort songs by their position along the route
+        songsOnRoute.sort((a, b) => {
+          const distA = getDistanceKm(userLocation.latitude, userLocation.longitude, a.latitude, a.longitude);
+          const distB = getDistanceKm(userLocation.latitude, userLocation.longitude, b.latitude, b.longitude);
+          return distA - distB;
+        });
+
+        setTripSongsOnRoute(songsOnRoute);
+
+        // Fit map to show the route
+        if (routeCoords.length > 0) {
+          const lngs = routeCoords.map(c => c[0]);
+          const lats = routeCoords.map(c => c[1]);
+          const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+          const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+          setViewState(prev => ({
+            ...prev,
+            longitude: centerLng,
+            latitude: centerLat,
+            zoom: 12
+          }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch route:', err);
+    }
+
+    setIsLoadingRoute(false);
+  }, [userLocation, songs]);
+
+  // Clear trip
+  const handleClearTrip = useCallback(() => {
+    setTripDestination(null);
+    setTripRoute(null);
+    setTripSongsOnRoute([]);
+  }, []);
+
   // Handlers
   const handleSongSelect = useCallback((song: SongLocation) => {
     setSelectedSong(song);
@@ -455,21 +586,25 @@ function AppContent() {
 
       {/* Map */}
       <MusicMap
-        songs={songsInRadius}
+        songs={discoveryMode === 'trip' ? tripSongsOnRoute : songsInRadius}
         allSongs={songs}
         currentSong={currentSong}
         selectedSong={selectedSong}
         onSongSelect={handleSongSelect}
         userLocation={userLocation}
-        radius={radius}
+        radius={discoveryMode === 'trip' ? 0 : radius}
         viewState={viewState}
         onViewStateChange={setViewState}
         discoveryMode={discoveryMode}
         discoveryCenter={
-          discoveryMode === 'nearby' 
-            ? userLocation 
-            : exploreCenter || { latitude: viewState.latitude, longitude: viewState.longitude }
+          discoveryMode === 'nearby'
+            ? userLocation
+            : discoveryMode === 'trip'
+              ? tripDestination ? { latitude: tripDestination.lat, longitude: tripDestination.lng } : null
+              : exploreCenter || { latitude: viewState.latitude, longitude: viewState.longitude }
         }
+        tripRoute={tripRoute}
+        tripDestination={tripDestination}
       />
 
       {/* Discovery Panel */}
@@ -513,6 +648,10 @@ function AppContent() {
             );
           }
         }}
+        onTripDestinationSet={handleTripDestinationSet}
+        tripSongsCount={tripSongsOnRoute.length}
+        tripDestination={tripDestination?.name || null}
+        onClearTrip={handleClearTrip}
       />
 
       {/* Music Player */}
@@ -527,6 +666,7 @@ function AppContent() {
         <SongDetailPanel
           song={currentSong}
           onClose={() => setShowDetailPanel(false)}
+          userLocation={userLocation}
         />
       )}
 
