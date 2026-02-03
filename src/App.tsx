@@ -383,9 +383,9 @@ function AppContent() {
     setIsLoadingRoute(true);
 
     try {
-      // Fetch route from Mapbox Directions API
+      // Fetch route from Mapbox Directions API with full geometry detail
       const response = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/walking/${userLocation.longitude},${userLocation.latitude};${destination.lng},${destination.lat}?geometries=geojson&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`
+        `https://api.mapbox.com/directions/v5/mapbox/walking/${userLocation.longitude},${userLocation.latitude};${destination.lng},${destination.lat}?geometries=geojson&overview=full&access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`
       );
       const data = await response.json();
 
