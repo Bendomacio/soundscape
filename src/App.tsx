@@ -605,6 +605,7 @@ function AppContent() {
         }
         tripRoute={tripRoute}
         tripDestination={tripDestination}
+        isAdmin={profile?.is_admin || false}
       />
 
       {/* Discovery Panel */}

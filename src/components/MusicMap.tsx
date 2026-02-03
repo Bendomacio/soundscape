@@ -24,6 +24,8 @@ interface MusicMapProps {
   // Trip mode props
   tripRoute?: [number, number][] | null;
   tripDestination?: { lat: number; lng: number; name: string } | null;
+  // Admin visibility
+  isAdmin?: boolean;
 }
 
 // Generate circle GeoJSON for radius visualization
@@ -54,20 +56,38 @@ function createCircleGeoJSON(
 }
 
 // Album art marker component with image caching
-function AlbumMarker({ 
-  song, 
-  isPlaying, 
-  isSelected, 
-  onClick 
-}: { 
-  song: SongLocation; 
-  isPlaying: boolean; 
+function AlbumMarker({
+  song,
+  isPlaying,
+  isSelected,
+  onClick
+}: {
+  song: SongLocation;
+  isPlaying: boolean;
   isSelected: boolean;
   onClick: () => void;
 }) {
   const [imgError, setImgError] = useState(false);
   const { src: cachedSrc, isLoading: imgLoading } = useCachedImage(song.albumArt);
   const size = isPlaying ? 64 : isSelected ? 56 : 48;
+
+  // Check if song is valid (has Spotify URI)
+  const isValid = !!song.spotifyUri;
+
+  // Color scheme based on validity
+  const ringColor = isPlaying
+    ? 'linear-gradient(135deg, #1DB954, #1ed760)'  // Green when playing
+    : isSelected
+      ? 'linear-gradient(135deg, #FF6B6B, #FFE66D)'  // Red/yellow when selected
+      : isValid
+        ? 'linear-gradient(135deg, #1DB954, #0d9e3f)'  // Green for valid songs
+        : 'linear-gradient(135deg, #f59e0b, #eab308)';  // Yellow/amber for invalid
+
+  const glowColor = isPlaying
+    ? 'rgba(29, 185, 84, 0.7)'
+    : !isValid
+      ? 'rgba(245, 158, 11, 0.5)'
+      : 'rgba(0,0,0,0.5)';
 
   return (
     <div
@@ -79,7 +99,7 @@ function AlbumMarker({
         transition: 'all 0.2s ease',
         position: 'relative',
       }}
-      title={`${song.title} by ${song.artist}`}
+      title={`${song.title} by ${song.artist}${!isValid ? ' (needs Spotify link)' : ''}`}
     >
       {/* Pulse animation for playing */}
       {isPlaying && (
@@ -96,21 +116,15 @@ function AlbumMarker({
           animation: 'pulse 1.5s ease-in-out infinite',
         }} />
       )}
-      
-      {/* Outer ring */}
+
+      {/* Outer ring - color coded by validity */}
       <div style={{
         width: '100%',
         height: '100%',
         borderRadius: '50%',
         padding: '3px',
-        background: isPlaying 
-          ? 'linear-gradient(135deg, #1DB954, #1ed760)' 
-          : isSelected 
-            ? 'linear-gradient(135deg, #FF6B6B, #FFE66D)'
-            : 'linear-gradient(135deg, #1DB954, #0d9e3f)',
-        boxShadow: isPlaying 
-          ? '0 0 25px rgba(29, 185, 84, 0.7)' 
-          : '0 4px 15px rgba(0,0,0,0.5)',
+        background: ringColor,
+        boxShadow: `0 ${isPlaying ? '0' : '4px'} ${isPlaying ? '25px' : '15px'} ${glowColor}`,
         position: 'relative',
       }}>
         {/* Inner circle with album art */}
@@ -125,7 +139,7 @@ function AlbumMarker({
           justifyContent: 'center',
         }}>
           {song.albumArt && !imgError && !imgLoading ? (
-            <img 
+            <img
               src={cachedSrc}
               alt={song.title}
               style={{
@@ -136,31 +150,10 @@ function AlbumMarker({
               onError={() => setImgError(true)}
             />
           ) : (
-            <Music size={size * 0.4} color="#1DB954" />
+            <Music size={size * 0.4} color={isValid ? '#1DB954' : '#f59e0b'} />
           )}
         </div>
       </div>
-
-      {/* Verified badge */}
-      {song.verified && (
-        <div style={{
-          position: 'absolute',
-          bottom: -2,
-          right: -2,
-          width: 18,
-          height: 18,
-          background: '#1DB954',
-          borderRadius: '50%',
-          border: '2px solid #0d1117',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-        </div>
-      )}
     </div>
   );
 }
@@ -178,18 +171,26 @@ export function MusicMap({
   discoveryMode = 'nearby',
   discoveryCenter,
   tripRoute,
-  tripDestination
+  tripDestination,
+  isAdmin = false
 }: MusicMapProps) {
   const mapRef = useRef<MapRef>(null);
 
   // Get song IDs that are in range for quick lookup
-  const inRangeSongIds = useMemo(() => new Set(songs.map(s => s.id)), [songs]);
+  // Filter songs: non-admins only see valid songs (with Spotify URI)
+  const visibleSongs = useMemo(() => {
+    if (isAdmin) return songs;
+    return songs.filter(s => !!s.spotifyUri);
+  }, [songs, isAdmin]);
 
-  // Songs outside range (dimmed)
+  const inRangeSongIds = useMemo(() => new Set(visibleSongs.map(s => s.id)), [visibleSongs]);
+
+  // Songs outside range (dimmed) - also filtered by validity for non-admins
   const songsOutOfRange = useMemo(() => {
     if (!allSongs || radius === 0) return [];
-    return allSongs.filter(s => !inRangeSongIds.has(s.id));
-  }, [allSongs, inRangeSongIds, radius]);
+    const filtered = isAdmin ? allSongs : allSongs.filter(s => !!s.spotifyUri);
+    return filtered.filter(s => !inRangeSongIds.has(s.id));
+  }, [allSongs, inRangeSongIds, radius, isAdmin]);
 
   // Generate radius circle GeoJSON
   const radiusCircle = useMemo(() => {
@@ -376,7 +377,7 @@ export function MusicMap({
         ))}
 
         {/* Songs in range (full visibility) */}
-        {songs.map(song => {
+        {visibleSongs.map(song => {
           const isPlaying = currentSong?.id === song.id;
           const isSelected = selectedSong?.id === song.id;
           
