@@ -16,7 +16,9 @@ import {
   Send,
   Trash2,
   Clock,
-  ImageIcon
+  ImageIcon,
+  Navigation,
+  Eye
 } from 'lucide-react';
 import type { SongLocation, SongComment, SongPhoto } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
@@ -146,14 +148,44 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
   };
 
   const handleShare = async () => {
-    const url = window.location.href;
+    const shareData = {
+      title: `${song.title} by ${song.artist}`,
+      text: `Check out "${song.title}" at ${song.locationName} on Soundscape!`,
+      url: `${window.location.origin}/?song=${song.id}`
+    };
+
+    // Use native share on mobile if available
+    if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fall back to clipboard
+        if ((err as Error).name === 'AbortError') return;
+      }
+    }
+
+    // Fallback: copy to clipboard
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(shareData.url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback for older browsers
     }
+  };
+
+  const handleGetDirections = () => {
+    // Opens Google Maps with directions from current location to song location
+    const destination = `${song.latitude},${song.longitude}`;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=walking`;
+    window.open(url, '_blank');
+  };
+
+  const handleOpenStreetView = () => {
+    // Opens Google Street View at the song location
+    const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${song.latitude},${song.longitude}`;
+    window.open(url, '_blank');
   };
 
   const handleLike = async () => {
@@ -591,7 +623,14 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
               }}>
                 <User size={14} />
               </div>
-              <span>Submitted by <strong style={{ color: 'var(--color-text)' }}>{song.submittedBy}</strong></span>
+              <span>
+                Submitted by <strong style={{ color: 'var(--color-text)' }}>{song.submittedBy}</strong>
+                {song.submittedAt && (
+                  <span style={{ marginLeft: '6px', opacity: 0.7 }}>
+                    · {formatTimeAgo(new Date(song.submittedAt))}
+                  </span>
+                )}
+              </span>
             </div>
           )}
 
@@ -637,18 +676,102 @@ export function SongDetailPanel({ song, onClose }: SongDetailPanelProps) {
 
           {/* Tab Content */}
           <div style={{ marginTop: '16px', minHeight: '150px' }}>
-            {/* Info Tab - Location details shown above */}
+            {/* Info Tab - Mini map and navigation */}
             {activeTab === 'info' && (
-              <div style={{ 
-                padding: '16px', 
-                background: 'var(--color-dark-lighter)', 
-                borderRadius: '12px',
-                textAlign: 'center',
-                color: 'var(--color-text-muted)',
-                fontSize: '14px'
-              }}>
-                <MapPin size={24} style={{ margin: '0 auto 8px', opacity: 0.5 }} />
-                <p>Location and song details shown above</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Mini Map Preview */}
+                <div style={{
+                  position: 'relative',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  background: 'var(--color-dark-lighter)'
+                }}>
+                  <img
+                    src={`https://api.mapbox.com/styles/v1/mapbox/dark-v11/static/pin-s+10b981(${song.longitude},${song.latitude})/${song.longitude},${song.latitude},15,0/400x200@2x?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`}
+                    alt={`Map of ${song.locationName}`}
+                    style={{
+                      width: '100%',
+                      height: '150px',
+                      objectFit: 'cover',
+                      display: 'block'
+                    }}
+                  />
+                  {/* Coordinates overlay */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    left: '8px',
+                    background: 'rgba(0,0,0,0.7)',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    color: 'var(--color-text-muted)',
+                    fontFamily: 'monospace'
+                  }}>
+                    {song.latitude.toFixed(5)}, {song.longitude.toFixed(5)}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* Get Directions */}
+                  <button
+                    onClick={handleGetDirections}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '14px 16px',
+                      background: 'var(--color-primary)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      color: 'white',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'opacity 0.2s'
+                    }}
+                  >
+                    <Navigation size={18} />
+                    Get Directions
+                  </button>
+
+                  {/* Street View */}
+                  <button
+                    onClick={handleOpenStreetView}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '14px 16px',
+                      background: 'var(--color-dark-lighter)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      color: 'var(--color-text)',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'background 0.2s'
+                    }}
+                  >
+                    <Eye size={18} />
+                    Street View
+                  </button>
+                </div>
+
+                {/* Location tip */}
+                <p style={{
+                  fontSize: '12px',
+                  color: 'var(--color-text-muted)',
+                  textAlign: 'center',
+                  margin: 0,
+                  opacity: 0.7
+                }}>
+                  Tap "Get Directions" to navigate to this song's location
+                </p>
               </div>
             )}
 
