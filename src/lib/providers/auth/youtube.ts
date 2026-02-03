@@ -116,13 +116,14 @@ export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAu
 
     if (!response.ok) {
       const error = await response.json();
-      console.error('YouTube token exchange failed:', error);
-      console.error('Request details:', {
+      console.error('YouTube token exchange failed:', JSON.stringify(error, null, 2));
+      console.error('Request details:', JSON.stringify({
         client_id: GOOGLE_CLIENT_ID,
+        client_secret_length: GOOGLE_CLIENT_SECRET?.length,
         redirect_uri: REDIRECT_URI,
         hasCodeVerifier: !!codeVerifier,
         codeLength: code?.length
-      });
+      }, null, 2));
       return null;
     }
 
