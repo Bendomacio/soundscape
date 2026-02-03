@@ -5,6 +5,7 @@
 import { logger } from '../../logger';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
 const REDIRECT_URI = typeof window !== 'undefined' ? `${window.location.origin}/callback/youtube` : '';
 
 // OAuth scopes for YouTube
@@ -105,6 +106,7 @@ export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAu
       },
       body: new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code,
         redirect_uri: REDIRECT_URI,
@@ -167,6 +169,7 @@ export async function refreshYouTubeToken(): Promise<YouTubeUserAuth | null> {
       },
       body: new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
         grant_type: 'refresh_token',
         refresh_token: refreshToken
       })
