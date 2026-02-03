@@ -483,6 +483,20 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            {/* Spotify unavailable message */}
+                            {isSpotify && !conn.isConnected && (
+                              <span style={{
+                                fontSize: '9px',
+                                color: 'var(--color-text-muted)',
+                                fontStyle: 'italic',
+                                maxWidth: '80px',
+                                textAlign: 'right',
+                                lineHeight: 1.3
+                              }}>
+                                API signups paused
+                              </span>
+                            )}
+
                             {/* SoundCloud Premium toggle */}
                             {isSoundCloud && conn.isConnected && (
                               <button
@@ -529,9 +543,32 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                                 <Unlink size={10} />
                                 Unlink
                               </button>
+                            ) : isSpotify ? (
+                              /* Spotify API signups are currently paused - show disabled state */
+                              <button
+                                disabled
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 10px',
+                                  background: 'rgba(255, 255, 255, 0.1)',
+                                  border: '1px solid var(--glass-border)',
+                                  borderRadius: '6px',
+                                  fontSize: '10px',
+                                  fontWeight: 500,
+                                  color: 'var(--color-text-muted)',
+                                  cursor: 'not-allowed',
+                                  opacity: 0.6
+                                }}
+                                title="Spotify API signups are currently paused"
+                              >
+                                <ExternalLink size={10} />
+                                Link
+                              </button>
                             ) : (
                               <button
-                                onClick={() => isSpotify ? connectSpotify() : connectProvider(provider)}
+                                onClick={() => connectProvider(provider)}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',

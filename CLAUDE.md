@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Self-Maintenance Rule
+
+**IMPORTANT**: When completing significant work on this codebase, update this file with:
+- New features added (under "Recent Features")
+- New environment variables required
+- New patterns or architectural decisions
+- New integrations or third-party services
+- Gotchas or lessons learned
+
+Keep this file current so future sessions have accurate context.
+
 ## Build and Development Commands
 
 ```bash
