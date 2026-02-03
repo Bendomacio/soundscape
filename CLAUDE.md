@@ -85,6 +85,7 @@ Optional (Provider OAuth - for premium playback):
 - `VITE_APPLE_MUSIC_TOKEN` - Apple MusicKit developer token (enables Apple Music subscriber playback)
 
 Note: SoundCloud doesn't have a public API, so it uses a self-reported connection flow.
+Note: Apple Music requires paid Apple Developer account ($99/year), so it's hidden in the UI.
 
 ## Database Scripts
 
