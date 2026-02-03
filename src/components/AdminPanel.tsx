@@ -1707,14 +1707,28 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                     song._issues = validateSongEntry(song);
 
                     // Check for duplicates (by title + artist, case insensitive)
-                    const normalizedTitle = song.title?.toLowerCase().trim();
-                    const normalizedArtist = song.artist?.toLowerCase().trim();
+                    const normalizedTitle = song.title?.toLowerCase().trim() || '';
+                    const normalizedArtist = song.artist?.toLowerCase().trim() || '';
+
+                    // Helper: check if artists match (handles empty, exact, and partial matches)
+                    const artistsMatch = (a1: string, a2: string): boolean => {
+                      const artist1 = a1.toLowerCase().trim();
+                      const artist2 = a2.toLowerCase().trim();
+                      // Empty artist on either side = potential match (flagged for review)
+                      if (!artist1 || !artist2) return true;
+                      // Exact match
+                      if (artist1 === artist2) return true;
+                      // Partial match (one contains the other, handles "The Beatles" vs "Beatles")
+                      if (artist1.includes(artist2) || artist2.includes(artist1)) return true;
+                      return false;
+                    };
 
                     // Check against existing songs in DB
-                    const duplicate = songs.find(s =>
-                      s.title.toLowerCase().trim() === normalizedTitle &&
-                      s.artist.toLowerCase().trim() === normalizedArtist
-                    );
+                    const duplicate = songs.find(s => {
+                      const dbTitle = s.title.toLowerCase().trim();
+                      const dbArtist = s.artist.toLowerCase().trim();
+                      return dbTitle === normalizedTitle && artistsMatch(dbArtist, normalizedArtist);
+                    });
 
                     if (duplicate) {
                       song._duplicate = true;
@@ -1722,10 +1736,11 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                     }
 
                     // Also check for duplicates within the import itself
-                    const duplicateInImport = parsed.find(s =>
-                      s.title?.toLowerCase().trim() === normalizedTitle &&
-                      s.artist?.toLowerCase().trim() === normalizedArtist
-                    );
+                    const duplicateInImport = parsed.find(s => {
+                      const importTitle = s.title?.toLowerCase().trim() || '';
+                      const importArtist = s.artist?.toLowerCase().trim() || '';
+                      return importTitle === normalizedTitle && artistsMatch(importArtist, normalizedArtist);
+                    });
                     if (duplicateInImport) {
                       song._duplicate = true;
                       song._duplicateOf = duplicateInImport._importId;
