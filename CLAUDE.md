@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build and Development Commands
 
 ```bash
-npm run dev      # Start development server (http://localhost:5174)
+npm run dev      # Start development server (http://localhost:5173)
 npm run build    # TypeScript check + Vite production build
 npm run lint     # Run ESLint
 npm run preview  # Preview production build
@@ -19,7 +19,10 @@ Soundscape is a location-based music discovery app built with React 19, TypeScri
 
 1. **App.tsx** is the main orchestrator - manages songs state, discovery filtering, and coordinates all major features
 2. **Songs** are fetched from Supabase on mount via `lib/songs.ts`, with fallback to mock data (`data/londonSongs.ts`) if Supabase is not configured
-3. **Discovery filtering** uses radius-based filtering with two modes: "nearby" (user's GPS location) or "explore" (map center or searched location)
+3. **Discovery filtering** uses radius-based filtering with three modes:
+   - **Nearby** - user's GPS location
+   - **Explore** - map center or searched location
+   - **Trip Mode** - songs within 500m of a route to a destination (uses Mapbox Directions API)
 4. **Spotify playback** supports two methods via `SpotifyPlayerContext`:
    - Web Playback SDK for Premium users (full playback control)
    - Embed/IFrame API fallback for non-Premium users (30-second previews)
@@ -105,3 +108,39 @@ interface SongLocation {
 - Album art URLs containing `i.scdn.co` are cached Spotify images; others trigger re-fetch
 - Rate limiting on Spotify oEmbed: requests are batched with 2-second delays
 - Row Level Security enforces that users can only edit their own songs; admins can edit all
+
+## Recent Features (Feb 2026)
+
+### Trip Mode (`DiscoveryPanel.tsx`, `App.tsx`)
+- Third discovery mode alongside Nearby and Explore
+- User enters destination, route fetched from Mapbox Directions API with `overview=full`
+- Songs within 500m of any point on the route are shown
+- Route visualized with orange line on map
+- Uses `pointToSegmentDistance()` for accurate perpendicular distance calculation
+
+### Songs Nearby & Related (`SongDetailPanel.tsx`)
+- Desktop sidebar panels appear to the right of song detail modal
+- **Songs Nearby**: songs within 5km, sorted by distance
+- **Related Songs**: other songs by the same artist (case-insensitive match with trim)
+- Clicking a song opens that song's detail panel
+- Hidden on mobile (uses `isMobile()` check)
+
+### Map Markers (`MusicMap.tsx`)
+- Color-coded rings indicate song validity:
+  - Green ring = valid song (has `spotifyUri`)
+  - Amber/yellow ring = invalid song (needs Spotify link)
+- Invalid songs only visible to admins (`isAdmin` prop)
+- Default map pitch: 45° for stylish tilt view
+
+### Song Detail Enhancements (`SongDetailPanel.tsx`)
+- Mini-map preview using Mapbox Static Images API
+- Embedded Google Maps directions on mobile (no API key needed)
+- Get Directions button (Google Maps walking route)
+- Street View button
+- Native share via Web Share API on mobile, clipboard fallback on desktop
+
+## Git Workflow Notes
+
+- GPG signing fails locally, use: `git -c commit.gpgsign=false commit`
+- Always include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` in commits
+- Dev server runs on port 5173 (not 5174 as previously documented)
