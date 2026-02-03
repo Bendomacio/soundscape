@@ -194,11 +194,10 @@ function AppContent() {
       setIsLoading(false);
       
       // Only fetch album art for songs that don't have real Spotify art cached
-      // Real Spotify art URLs contain "i.scdn.co"
-      const songsNeedingArt = data.filter(s => 
-        s.spotifyUri && 
-        s.albumArt && 
-        !s.albumArt.includes('i.scdn.co')
+      // Real Spotify art URLs contain "i.scdn.co" or "spotifycdn.com"
+      const songsNeedingArt = data.filter(s =>
+        s.spotifyUri &&
+        (!s.albumArt || (!s.albumArt.includes('i.scdn.co') && !s.albumArt.includes('spotifycdn.com')))
       );
       
       if (songsNeedingArt.length === 0) {
