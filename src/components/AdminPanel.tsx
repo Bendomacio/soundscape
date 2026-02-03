@@ -32,7 +32,8 @@ import { getTrackInfo } from '../lib/spotify';
 import { getPendingPhotos, approvePhoto, rejectPhoto } from '../lib/comments';
 import { setSongStatus, fetchAllSongsAdmin, addSong } from '../lib/songs';
 import { detectProvider, extractProviderId } from '../lib/providers';
-import { batchLookupSpotifyUris, type LookupProgress, type SpotifyLookupResult } from '../lib/spotifyLookup';
+import { batchLookupSpotifyUris, batchVerifyMetadata, type LookupProgress, type SpotifyLookupResult, type MetadataVerifyResult } from '../lib/spotifyLookup';
+import { updateSong } from '../lib/songs';
 
 // Validation issue types
 type ValidationIssue =
@@ -182,6 +183,14 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
   const [importResults, setImportResults] = useState<{ success: number; failed: number } | null>(null);
   const [selectedForReview, setSelectedForReview] = useState<Set<string>>(new Set());
   const [reviewFilter, setReviewFilter] = useState<'all' | 'flagged' | 'clean'>('all');
+
+  // Metadata verification state
+  const [verifyingMetadata, setVerifyingMetadata] = useState(false);
+  const [verifyProgress, setVerifyProgress] = useState<{ current: number; total: number; songTitle: string } | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Map<string, { current: { title: string; artist: string; album?: string }; spotify: MetadataVerifyResult; hasMismatch: boolean }>>(new Map());
+  const [selectedForFix, setSelectedForFix] = useState<Set<string>>(new Set());
+  const [applyingFixes, setApplyingFixes] = useState(false);
+  const [showVerifyPanel, setShowVerifyPanel] = useState(false);
 
   // Load all songs for review tab
   useEffect(() => {
@@ -560,37 +569,401 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           borderBottom: '1px solid var(--color-dark-lighter)',
           flexShrink: 0
         }}>
-          <div style={{ position: 'relative' }}>
-            <Search 
-              size={20} 
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ position: 'relative', flex: 1 }}>
+              <Search
+                size={20}
+                style={{
+                  position: 'absolute',
+                  left: '16px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--color-text-muted)',
+                  pointerEvents: 'none'
+                }}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search songs by title, artist, or location..."
+                style={{
+                  width: '100%',
+                  height: '48px',
+                  paddingLeft: '52px',
+                  paddingRight: '16px',
+                  fontSize: '15px',
+                  background: 'var(--color-dark-lighter)',
+                  border: '1px solid transparent',
+                  borderRadius: '12px',
+                  color: 'var(--color-text)',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            <button
+              onClick={() => setShowVerifyPanel(!showVerifyPanel)}
               style={{
-                position: 'absolute',
-                left: '16px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-text-muted)',
-                pointerEvents: 'none'
-              }}
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search songs by title, artist, or location..."
-              style={{
-                width: '100%',
-                height: '48px',
-                paddingLeft: '52px',
-                paddingRight: '16px',
-                fontSize: '15px',
-                background: 'var(--color-dark-lighter)',
-                border: '1px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 16px',
+                background: showVerifyPanel ? '#1DB954' : 'var(--color-dark-lighter)',
+                color: showVerifyPanel ? 'white' : 'var(--color-text)',
+                border: 'none',
                 borderRadius: '12px',
-                color: 'var(--color-text)',
-                outline: 'none'
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
               }}
-            />
+            >
+              <RefreshCw size={16} />
+              Verify Metadata
+            </button>
           </div>
+
+          {/* Metadata Verification Panel */}
+          {showVerifyPanel && (
+            <div style={{
+              marginTop: '16px',
+              padding: '16px',
+              background: 'var(--color-dark-card)',
+              borderRadius: '12px'
+            }}>
+              <div style={{ marginBottom: '12px' }}>
+                <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 4px 0' }}>
+                  Metadata Verification
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: 0 }}>
+                  Check songs with Spotify links against their actual Spotify data. Fix incorrect titles, artists, and albums.
+                </p>
+              </div>
+
+              {!verifyingMetadata && verifyResults.size === 0 && (
+                <button
+                  onClick={async () => {
+                    const songsWithSpotify = songs.filter(s => s.spotifyUri);
+                    if (songsWithSpotify.length === 0) {
+                      alert('No songs with Spotify links to verify');
+                      return;
+                    }
+
+                    setVerifyingMetadata(true);
+                    setVerifyResults(new Map());
+                    setSelectedForFix(new Set());
+
+                    const results = await batchVerifyMetadata(
+                      songsWithSpotify.map(s => ({
+                        id: s.id,
+                        spotifyUri: s.spotifyUri!,
+                        title: s.title,
+                        artist: s.artist,
+                        album: s.album
+                      })),
+                      (current, total, songTitle) => {
+                        setVerifyProgress({ current, total, songTitle });
+                      },
+                      1500
+                    );
+
+                    setVerifyResults(results);
+                    setVerifyingMetadata(false);
+                    setVerifyProgress(null);
+
+                    // Auto-select all mismatched songs
+                    const mismatched = new Set<string>();
+                    results.forEach((result, id) => {
+                      if (result.hasMismatch) mismatched.add(id);
+                    });
+                    setSelectedForFix(mismatched);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '10px 20px',
+                    background: '#1DB954',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Zap size={16} />
+                  Verify {songs.filter(s => s.spotifyUri).length} Songs
+                </button>
+              )}
+
+              {verifyingMetadata && verifyProgress && (
+                <div style={{ textAlign: 'center', padding: '16px' }}>
+                  <Loader size={24} className="animate-spin" style={{ color: '#1DB954', margin: '0 auto 12px' }} />
+                  <div style={{ fontSize: '14px', marginBottom: '4px' }}>
+                    Checking: {verifyProgress.songTitle}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    {verifyProgress.current} / {verifyProgress.total}
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    height: '4px',
+                    background: 'var(--color-dark-lighter)',
+                    borderRadius: '2px',
+                    marginTop: '12px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      width: `${(verifyProgress.current / verifyProgress.total) * 100}%`,
+                      height: '100%',
+                      background: '#1DB954',
+                      transition: 'width 0.3s'
+                    }} />
+                  </div>
+                </div>
+              )}
+
+              {!verifyingMetadata && verifyResults.size > 0 && (
+                <div>
+                  {/* Stats */}
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                    <div style={{
+                      padding: '10px 14px',
+                      background: 'var(--color-dark-lighter)',
+                      borderRadius: '8px',
+                      flex: 1,
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#10b981' }}>
+                        {Array.from(verifyResults.values()).filter(r => !r.hasMismatch).length}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Correct</div>
+                    </div>
+                    <div style={{
+                      padding: '10px 14px',
+                      background: 'var(--color-dark-lighter)',
+                      borderRadius: '8px',
+                      flex: 1,
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#f59e0b' }}>
+                        {Array.from(verifyResults.values()).filter(r => r.hasMismatch).length}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Mismatched</div>
+                    </div>
+                  </div>
+
+                  {/* Mismatched songs list */}
+                  {Array.from(verifyResults.values()).filter(r => r.hasMismatch).length > 0 && (
+                    <>
+                      <div style={{
+                        maxHeight: '200px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--color-dark-lighter)',
+                        borderRadius: '8px',
+                        marginBottom: '12px'
+                      }}>
+                        {Array.from(verifyResults.entries())
+                          .filter(([, r]) => r.hasMismatch)
+                          .map(([songId, result], idx, arr) => (
+                            <div
+                              key={songId}
+                              style={{
+                                padding: '12px',
+                                borderBottom: idx < arr.length - 1 ? '1px solid var(--color-dark-lighter)' : 'none',
+                                background: selectedForFix.has(songId) ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedForFix.has(songId)}
+                                  onChange={() => {
+                                    const newSet = new Set(selectedForFix);
+                                    if (newSet.has(songId)) {
+                                      newSet.delete(songId);
+                                    } else {
+                                      newSet.add(songId);
+                                    }
+                                    setSelectedForFix(newSet);
+                                  }}
+                                  style={{ marginTop: '3px', cursor: 'pointer' }}
+                                />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  {/* Current vs Spotify comparison */}
+                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Current:</span>
+                                    <span style={{
+                                      fontSize: '13px',
+                                      textDecoration: result.current.title !== result.spotify.title ? 'line-through' : 'none',
+                                      color: result.current.title !== result.spotify.title ? '#ef4444' : 'var(--color-text)'
+                                    }}>
+                                      {result.current.title}
+                                    </span>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>by</span>
+                                    <span style={{
+                                      fontSize: '13px',
+                                      textDecoration: result.current.artist.toLowerCase() !== result.spotify.artist.toLowerCase() ? 'line-through' : 'none',
+                                      color: result.current.artist.toLowerCase() !== result.spotify.artist.toLowerCase() ? '#ef4444' : 'var(--color-text)'
+                                    }}>
+                                      {result.current.artist}
+                                    </span>
+                                  </div>
+                                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: '12px', color: '#1DB954' }}>Spotify:</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                                      {result.spotify.title}
+                                    </span>
+                                    <span style={{ color: 'var(--color-text-muted)' }}>by</span>
+                                    <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                                      {result.spotify.artist}
+                                    </span>
+                                    {result.spotify.album && (
+                                      <>
+                                        <span style={{ color: 'var(--color-text-muted)' }}>•</span>
+                                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                                          {result.spotify.album}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+
+                      {/* Bulk actions */}
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={() => {
+                            const allMismatched = new Set<string>();
+                            verifyResults.forEach((result, id) => {
+                              if (result.hasMismatch) allMismatched.add(id);
+                            });
+                            setSelectedForFix(allMismatched);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            background: 'var(--color-dark-lighter)',
+                            color: 'var(--color-text)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Select All
+                        </button>
+                        <button
+                          onClick={() => setSelectedForFix(new Set())}
+                          style={{
+                            padding: '6px 12px',
+                            background: 'var(--color-dark-lighter)',
+                            color: 'var(--color-text)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Deselect All
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (selectedForFix.size === 0) return;
+
+                            setApplyingFixes(true);
+                            let fixed = 0;
+
+                            for (const songId of selectedForFix) {
+                              const result = verifyResults.get(songId);
+                              if (!result) continue;
+
+                              const success = await updateSong(songId, {
+                                title: result.spotify.title,
+                                artist: result.spotify.artist,
+                                album: result.spotify.album || undefined,
+                                albumArt: result.spotify.albumArt || undefined
+                              });
+
+                              if (success) {
+                                fixed++;
+                                // Update local song list
+                                onUpdateSong(songId, {
+                                  title: result.spotify.title,
+                                  artist: result.spotify.artist,
+                                  album: result.spotify.album || undefined,
+                                  albumArt: result.spotify.albumArt || undefined
+                                });
+                              }
+                            }
+
+                            setApplyingFixes(false);
+                            alert(`Fixed ${fixed} of ${selectedForFix.size} songs`);
+
+                            // Clear results
+                            setVerifyResults(new Map());
+                            setSelectedForFix(new Set());
+                            onRefreshSongs?.();
+                          }}
+                          disabled={selectedForFix.size === 0 || applyingFixes}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            background: selectedForFix.size > 0 ? '#1DB954' : 'var(--color-dark-lighter)',
+                            color: selectedForFix.size > 0 ? 'white' : 'var(--color-text-muted)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            cursor: selectedForFix.size > 0 ? 'pointer' : 'not-allowed',
+                            opacity: applyingFixes ? 0.7 : 1
+                          }}
+                        >
+                          {applyingFixes ? (
+                            <>
+                              <Loader size={12} className="animate-spin" />
+                              Applying...
+                            </>
+                          ) : (
+                            <>
+                              <Check size={12} />
+                              Apply Fixes ({selectedForFix.size})
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Reset button */}
+                  <div style={{ marginTop: '12px' }}>
+                    <button
+                      onClick={() => {
+                        setVerifyResults(new Map());
+                        setSelectedForFix(new Set());
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        background: 'none',
+                        color: 'var(--color-text-muted)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Clear Results
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         )}
 

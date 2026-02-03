@@ -5,6 +5,8 @@
  * 1. Search iTunes API for the song (free, no auth)
  * 2. Pass iTunes URL to song.link/Odesli API to get cross-platform links
  * 3. Extract Spotify URI from the response
+ *
+ * Also provides reverse lookup: get metadata from Spotify URI via song.link
  */
 
 interface ITunesResult {
@@ -344,6 +346,148 @@ export async function batchLookupSpotifyUris(
     }
 
     // Rate limit delay between requests
+    if (i < songs.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Metadata verification result from Spotify
+ */
+export interface MetadataVerifyResult {
+  spotifyUri: string;
+  title: string;
+  artist: string;
+  album: string | null;
+  albumArt: string | null;
+}
+
+/**
+ * Get correct metadata for a Spotify track via song.link → iTunes
+ * This is the reverse lookup: Spotify URI → song.link → iTunes metadata
+ */
+export async function verifySpotifyMetadata(
+  spotifyUri: string
+): Promise<MetadataVerifyResult | null> {
+  try {
+    // Extract track ID from URI
+    const trackId = spotifyUri.replace('spotify:track:', '');
+    const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
+
+    // Use song.link to get cross-platform data
+    const encoded = encodeURIComponent(spotifyUrl);
+    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error('RATE_LIMITED');
+      }
+      console.warn('song.link lookup failed:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // song.link returns entitiesByUniqueId with metadata
+    // Try to get data from iTunes/Apple Music entity (has best metadata)
+    let title = '';
+    let artist = '';
+    let album: string | null = null;
+    let albumArt: string | null = null;
+
+    // Look for iTunes entity first (best metadata)
+    const entities = data.entitiesByUniqueId || {};
+    for (const [entityId, entity] of Object.entries(entities)) {
+      if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
+        const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string; albumName?: string };
+        title = e.title || title;
+        artist = e.artistName || artist;
+        albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || albumArt;
+        album = e.albumName || album;
+        break;
+      }
+    }
+
+    // Fallback to Spotify entity if no iTunes
+    if (!title || !artist) {
+      for (const [entityId, entity] of Object.entries(entities)) {
+        if (entityId.startsWith('SPOTIFY_SONG::')) {
+          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string; albumName?: string };
+          title = e.title || title;
+          artist = e.artistName || artist;
+          albumArt = e.thumbnailUrl || albumArt;
+          album = e.albumName || album;
+          break;
+        }
+      }
+    }
+
+    if (!title || !artist) {
+      return null;
+    }
+
+    return {
+      spotifyUri,
+      title,
+      artist,
+      album,
+      albumArt
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'RATE_LIMITED') {
+      throw error;
+    }
+    console.error('Metadata verification error:', error);
+    return null;
+  }
+}
+
+/**
+ * Batch verify metadata for multiple songs
+ */
+export async function batchVerifyMetadata(
+  songs: Array<{ id: string; spotifyUri: string; title: string; artist: string; album?: string }>,
+  onProgress?: (current: number, total: number, songTitle: string) => void,
+  delayMs: number = 1500
+): Promise<Map<string, { current: { title: string; artist: string; album?: string }; spotify: MetadataVerifyResult; hasMismatch: boolean }>> {
+  const results = new Map<string, { current: { title: string; artist: string; album?: string }; spotify: MetadataVerifyResult; hasMismatch: boolean }>();
+
+  for (let i = 0; i < songs.length; i++) {
+    const song = songs[i];
+    onProgress?.(i + 1, songs.length, song.title);
+
+    try {
+      const verified = await verifySpotifyMetadata(song.spotifyUri);
+
+      if (verified) {
+        // Check for mismatches (case-insensitive comparison)
+        const titleMismatch = verified.title.toLowerCase().trim() !== song.title.toLowerCase().trim();
+        const artistMismatch = verified.artist.toLowerCase().trim() !== song.artist.toLowerCase().trim();
+        const albumMismatch = verified.album && song.album ?
+          verified.album.toLowerCase().trim() !== song.album.toLowerCase().trim() : false;
+
+        const hasMismatch = titleMismatch || artistMismatch || albumMismatch;
+
+        results.set(song.id, {
+          current: { title: song.title, artist: song.artist, album: song.album },
+          spotify: verified,
+          hasMismatch
+        });
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'RATE_LIMITED') {
+        // Wait longer on rate limit
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        i--; // Retry this song
+        continue;
+      }
+      console.error(`Failed to verify ${song.title}:`, error);
+    }
+
+    // Rate limit delay
     if (i < songs.length - 1) {
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
