@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/callback/:path*", "destination": "/index.html" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }
