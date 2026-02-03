@@ -7,9 +7,9 @@
   --color-primary-dark: #059669;
   --color-accent: #F43F5E;
   --color-accent-secondary: #FBBF24;
-  --color-dark: #0D1117;
-  --color-dark-lighter: #161B22;
-  --color-dark-card: #21262D;
+  --color-dark: #0a0c10;
+  --color-dark-lighter: #141820;
+  --color-dark-card: #1c2028;
   --color-text: #F0F6FC;
   --color-text-muted: #8B949E;
 }
@@ -34,6 +34,11 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.06) 0px, transparent 50%),
+    radial-gradient(at 50% 100%, rgba(244, 63, 94, 0.05) 0px, transparent 50%);
+  background-attachment: fixed;
 }
 
 /* Hide mapbox logo and attribution */
@@ -110,29 +115,30 @@ body {
   background: var(--color-text-muted);
 }
 
-/* Playing bars animation */
+/* Playing bars animation - enhanced */
 .playing-bars {
   display: flex;
   align-items: flex-end;
-  gap: 2px;
+  gap: 3px;
   height: 16px;
 }
 
 .playing-bars span {
   width: 3px;
-  background: var(--color-primary);
-  border-radius: 1px;
-  animation: playing-bar 0.5s ease-in-out infinite;
+  background: linear-gradient(to top, var(--color-primary), var(--color-accent-secondary));
+  border-radius: 2px;
+  animation: playing-bar 0.6s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
 }
 
 .playing-bars span:nth-child(1) { height: 60%; animation-delay: 0s; }
-.playing-bars span:nth-child(2) { height: 100%; animation-delay: 0.1s; }
-.playing-bars span:nth-child(3) { height: 40%; animation-delay: 0.2s; }
-.playing-bars span:nth-child(4) { height: 80%; animation-delay: 0.3s; }
+.playing-bars span:nth-child(2) { height: 100%; animation-delay: 0.15s; }
+.playing-bars span:nth-child(3) { height: 40%; animation-delay: 0.25s; }
+.playing-bars span:nth-child(4) { height: 80%; animation-delay: 0.35s; }
 
 @keyframes playing-bar {
-  0%, 100% { transform: scaleY(0.5); }
-  50% { transform: scaleY(1); }
+  0%, 100% { transform: scaleY(0.4); opacity: 0.7; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 
 /* Spinner animation */

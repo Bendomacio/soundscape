@@ -11,7 +11,8 @@ import {
   Compass,
   Loader2,
   Route,
-  Music
+  Music,
+  Sparkles
 } from 'lucide-react';
 
 interface DiscoveryPanelProps {
@@ -39,11 +40,43 @@ interface SearchResult {
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const RADIUS_PRESETS = [
-  { value: 1, label: '1km', description: 'Walking' },
-  { value: 5, label: '5km', description: 'Neighbourhood' },
-  { value: 10, label: '10km', description: 'District' },
-  { value: 0, label: 'All', description: 'Global' }
+  { value: 1, label: '1km', icon: '🚶' },
+  { value: 5, label: '5km', icon: '🏘️' },
+  { value: 10, label: '10km', icon: '🌆' },
+  { value: 0, label: 'All', icon: '🌍' }
 ];
+
+const getModeConfig = (mode: 'nearby' | 'explore' | 'trip') => {
+  switch (mode) {
+    case 'nearby':
+      return {
+        gradient: 'var(--gradient-primary)',
+        color: 'var(--color-primary)',
+        bgHover: 'rgba(16, 185, 129, 0.15)',
+        border: 'rgba(16, 185, 129, 0.3)',
+        icon: Target,
+        label: 'Near Me'
+      };
+    case 'explore':
+      return {
+        gradient: 'var(--gradient-purple)',
+        color: '#8b5cf6',
+        bgHover: 'rgba(139, 92, 246, 0.15)',
+        border: 'rgba(139, 92, 246, 0.3)',
+        icon: Globe,
+        label: 'Exploring'
+      };
+    case 'trip':
+      return {
+        gradient: 'var(--gradient-sunset)',
+        color: '#f59e0b',
+        bgHover: 'rgba(245, 158, 11, 0.15)',
+        border: 'rgba(245, 158, 11, 0.3)',
+        icon: Route,
+        label: 'Trip Mode'
+      };
+  }
+};
 
 export function DiscoveryPanel({
   radius,
@@ -137,17 +170,17 @@ export function DiscoveryPanel({
   // Debounced search
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
-    
+
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
-    
+
     if (!query.trim()) {
       setSearchResults([]);
       setShowResults(false);
       return;
     }
-    
+
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
@@ -176,59 +209,88 @@ export function DiscoveryPanel({
   const displayRadius = isShowingAll ? 'All' : `${radius}km`;
   const percentage = isShowingAll ? 100 : Math.min((radius / 20) * 100, 100);
 
+  const modeConfig = getModeConfig(mode);
+  const ModeIcon = modeConfig.icon;
+
   return (
-    <div 
-      className="discovery-panel"
+    <div
+      className="discovery-panel card-glass animate-slide-up"
       style={{
         position: 'absolute',
         top: '80px',
         left: '16px',
         right: 'auto',
-        width: isExpanded ? '320px' : '280px',
+        width: isExpanded ? '340px' : '300px',
         maxWidth: 'calc(100vw - 32px)',
-        background: 'var(--color-dark-card)',
-        borderRadius: '16px',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        border: '1px solid var(--color-dark-lighter)',
         zIndex: 20,
-        transition: 'width 200ms ease',
+        transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
         overflow: 'hidden'
       }}
     >
       {/* Header - Always visible */}
-      <div 
-        style={{ 
+      <div
+        style={{
           padding: '16px',
-          cursor: 'pointer'
+          cursor: 'pointer',
+          position: 'relative',
+          overflow: 'hidden'
         }}
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Ambient glow based on mode */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '150px',
+          height: '150px',
+          background: modeConfig.gradient,
+          filter: 'blur(60px)',
+          opacity: 0.15,
+          pointerEvents: 'none'
+        }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* Mode icon with gradient background */}
             <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: mode === 'nearby'
-                ? 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))'
-                : mode === 'trip'
-                  ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
-                  : 'linear-gradient(135deg, #8b5cf6, #6366f1)',
+              width: '42px',
+              height: '42px',
+              borderRadius: '14px',
+              background: modeConfig.gradient,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0
+              flexShrink: 0,
+              boxShadow: `0 4px 16px ${modeConfig.color}40`
             }}>
-              {mode === 'nearby' ? <Target size={18} color="white" /> : mode === 'trip' ? <Route size={18} color="white" /> : <Globe size={18} color="white" />}
+              <ModeIcon size={20} color="white" />
             </div>
             <div style={{ minWidth: 0 }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, margin: 0, whiteSpace: 'nowrap' }}>
-                {mode === 'nearby' ? 'Near Me' : mode === 'trip' ? 'Trip Mode' : 'Exploring'}
+              <h3 style={{
+                fontSize: '15px',
+                fontWeight: 600,
+                margin: 0,
+                whiteSpace: 'nowrap',
+                letterSpacing: '-0.01em'
+              }}>
+                {modeConfig.label}
               </h3>
-              <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', margin: 0, whiteSpace: 'nowrap' }}>
+              <p style={{
+                fontSize: '12px',
+                color: 'var(--color-text-muted)',
+                margin: '2px 0 0 0',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
                 {mode === 'trip'
                   ? tripDestination
-                    ? `${tripSongsCount} ${tripSongsCount === 1 ? 'song' : 'songs'} on route`
+                    ? <>
+                        <Sparkles size={10} style={{ color: modeConfig.color }} />
+                        {`${tripSongsCount} ${tripSongsCount === 1 ? 'song' : 'songs'} on route`}
+                      </>
                     : 'Set a destination'
                   : isShowingAll
                     ? `${totalSongCount} songs total`
@@ -237,27 +299,39 @@ export function DiscoveryPanel({
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/* Radius/status indicator */}
+            <div style={{
+              padding: '6px 12px',
+              background: modeConfig.bgHover,
+              borderRadius: '10px',
+              border: `1px solid ${modeConfig.border}`
+            }}>
               <span style={{
-                fontSize: '20px',
+                fontSize: '16px',
                 fontWeight: 700,
-                color: mode === 'nearby' ? 'var(--color-primary)' : mode === 'trip' ? '#f59e0b' : '#8b5cf6'
+                color: modeConfig.color
               }}>
                 {mode === 'trip' ? (tripDestination ? '🎵' : '📍') : displayRadius}
               </span>
             </div>
-            {isExpanded ? <ChevronUp size={18} color="var(--color-text-muted)" /> : <ChevronDown size={18} color="var(--color-text-muted)" />}
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              {isExpanded ? <ChevronUp size={16} color="var(--color-text-muted)" /> : <ChevronDown size={16} color="var(--color-text-muted)" />}
+            </div>
           </div>
         </div>
 
         {/* Quick Radius Presets - Compact (hidden in trip mode) */}
         {mode !== 'trip' && (
-          <div style={{
-            display: 'flex',
-            gap: '6px',
-            marginTop: '12px'
-          }}>
+          <div className="toggle-group" style={{ marginTop: '14px', padding: '3px' }}>
             {RADIUS_PRESETS.map(preset => (
               <button
                 key={preset.value}
@@ -265,21 +339,15 @@ export function DiscoveryPanel({
                   e.stopPropagation();
                   onRadiusChange(preset.value);
                 }}
+                className={`toggle-item ${radius === preset.value ? 'toggle-item-active' : ''}`}
                 style={{
-                  flex: 1,
-                  padding: '6px 4px',
-                  background: radius === preset.value
-                    ? (mode === 'nearby' ? 'var(--color-primary)' : '#8b5cf6')
-                    : 'var(--color-dark-lighter)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  color: radius === preset.value ? 'white' : 'var(--color-text-muted)',
+                  padding: '8px 6px',
                   fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease'
+                  gap: '4px',
+                  ...(radius === preset.value && mode === 'explore' ? { background: 'var(--gradient-purple)' } : {})
                 }}
               >
+                <span style={{ fontSize: '11px' }}>{preset.icon}</span>
                 {preset.label}
               </button>
             ))}
@@ -288,19 +356,28 @@ export function DiscoveryPanel({
 
         {/* Trip mode destination preview */}
         {mode === 'trip' && tripDestination && (
-          <div style={{
+          <div className="badge badge-amber" style={{
+            marginTop: '14px',
+            padding: '10px 14px',
+            width: '100%',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            marginTop: '12px',
-            padding: '8px 12px',
-            background: 'rgba(245, 158, 11, 0.15)',
-            borderRadius: '8px'
+            justifyContent: 'space-between',
+            borderRadius: '12px',
+            background: 'rgba(245, 158, 11, 0.1)',
+            fontSize: '13px'
           }}>
-            <Route size={14} color="#f59e0b" />
-            <span style={{ flex: 1, fontSize: '12px', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              To: {tripDestination}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+              <Route size={14} />
+              <span style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: 'var(--color-text)'
+              }}>
+                To: {tripDestination}
+              </span>
+            </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -308,10 +385,14 @@ export function DiscoveryPanel({
               }}
               style={{
                 padding: '4px',
-                background: 'none',
+                background: 'rgba(255, 255, 255, 0.1)',
                 border: 'none',
+                borderRadius: '6px',
                 cursor: 'pointer',
-                color: 'var(--color-text-muted)'
+                color: 'var(--color-text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
               }}
             >
               <X size={14} />
@@ -322,79 +403,40 @@ export function DiscoveryPanel({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div style={{ 
-          borderTop: '1px solid var(--color-dark-lighter)',
+        <div className="animate-slide-down" style={{
+          borderTop: '1px solid var(--glass-border)',
           padding: '16px',
-          animation: 'slideDown 200ms ease'
         }}>
           {/* Mode Toggle */}
-          <div style={{ marginBottom: '16px' }}>
-            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ marginBottom: '20px' }}>
+            <p style={{
+              fontSize: '11px',
+              color: 'var(--color-text-muted)',
+              marginBottom: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              fontWeight: 500
+            }}>
               Discovery Mode
             </p>
-            <div style={{ display: 'flex', gap: '6px' }}>
+            <div className="toggle-group" style={{ padding: '4px' }}>
               <button
                 onClick={() => onModeChange('nearby')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  padding: '10px 6px',
-                  background: mode === 'nearby' ? 'rgba(16, 185, 129, 0.15)' : 'var(--color-dark-lighter)',
-                  border: mode === 'nearby' ? '1px solid var(--color-primary)' : '1px solid transparent',
-                  borderRadius: '10px',
-                  color: mode === 'nearby' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease'
-                }}
+                className={`toggle-item ${mode === 'nearby' ? 'toggle-item-active' : ''}`}
               >
                 <Navigation size={14} />
                 Nearby
               </button>
               <button
                 onClick={() => onModeChange('explore')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  padding: '10px 6px',
-                  background: mode === 'explore' ? 'rgba(139, 92, 246, 0.15)' : 'var(--color-dark-lighter)',
-                  border: mode === 'explore' ? '1px solid #8b5cf6' : '1px solid transparent',
-                  borderRadius: '10px',
-                  color: mode === 'explore' ? '#8b5cf6' : 'var(--color-text-muted)',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease'
-                }}
+                className={`toggle-item ${mode === 'explore' ? 'toggle-item-active toggle-purple' : ''}`}
               >
                 <Compass size={14} />
                 Explore
               </button>
               <button
                 onClick={() => onModeChange('trip')}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '4px',
-                  padding: '10px 6px',
-                  background: mode === 'trip' ? 'rgba(245, 158, 11, 0.15)' : 'var(--color-dark-lighter)',
-                  border: mode === 'trip' ? '1px solid #f59e0b' : '1px solid transparent',
-                  borderRadius: '10px',
-                  color: mode === 'trip' ? '#f59e0b' : 'var(--color-text-muted)',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  transition: 'all 150ms ease'
-                }}
+                className={`toggle-item ${mode === 'trip' ? 'toggle-item-active toggle-sunset' : ''}`}
               >
                 <Route size={14} />
                 Trip
@@ -403,35 +445,37 @@ export function DiscoveryPanel({
           </div>
 
           {/* Custom Radius Slider */}
-          {!isShowingAll && (
-            <div style={{ marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          {mode !== 'trip' && !isShowingAll && (
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <p style={{
+                  fontSize: '11px',
+                  color: 'var(--color-text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  fontWeight: 500
+                }}>
                   Custom Radius
                 </p>
-                <span style={{ fontSize: '12px', color: 'var(--color-text)', fontWeight: 500 }}>{radius}km</span>
-              </div>
-              <div style={{ position: 'relative', height: '20px' }}>
-                <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: 0,
-                  right: 0,
-                  height: '6px',
-                  transform: 'translateY(-50%)',
-                  background: 'var(--color-dark-lighter)',
-                  borderRadius: '3px',
-                  overflow: 'hidden'
+                <span style={{
+                  fontSize: '13px',
+                  color: modeConfig.color,
+                  fontWeight: 600
                 }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${percentage}%`,
-                    background: mode === 'nearby' 
-                      ? 'linear-gradient(90deg, var(--color-primary), var(--color-accent))'
-                      : 'linear-gradient(90deg, #8b5cf6, #ec4899)',
-                    borderRadius: '3px',
-                    transition: 'width 150ms ease'
-                  }} />
+                  {radius}km
+                </span>
+              </div>
+              <div style={{ position: 'relative', height: '24px' }}>
+                <div className="slider-track">
+                  <div
+                    className="slider-fill"
+                    style={{
+                      width: `${percentage}%`,
+                      background: mode === 'nearby'
+                        ? 'var(--gradient-primary)'
+                        : 'var(--gradient-purple)'
+                    }}
+                  />
                 </div>
                 <input
                   type="range"
@@ -451,20 +495,14 @@ export function DiscoveryPanel({
                     margin: 0
                   }}
                 />
-                <div style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: `${percentage}%`,
-                  width: '16px',
-                  height: '16px',
-                  transform: 'translate(-50%, -50%)',
-                  background: 'white',
-                  borderRadius: '50%',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                  border: `3px solid ${mode === 'nearby' ? 'var(--color-primary)' : '#8b5cf6'}`,
-                  pointerEvents: 'none',
-                  transition: 'left 150ms ease'
-                }} />
+                <div
+                  className="slider-thumb"
+                  style={{
+                    left: `${percentage}%`,
+                    top: '3px',
+                    boxShadow: `0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 3px ${modeConfig.color}50`
+                  }}
+                />
               </div>
             </div>
           )}
@@ -472,7 +510,14 @@ export function DiscoveryPanel({
           {/* Trip Destination Search (only in trip mode) */}
           {mode === 'trip' && (
             <div ref={tripSearchRef} style={{ position: 'relative', marginBottom: '16px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <p style={{
+                fontSize: '11px',
+                color: 'var(--color-text-muted)',
+                marginBottom: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                fontWeight: 500
+              }}>
                 Where are you going?
               </p>
               <div style={{ position: 'relative' }}>
@@ -480,7 +525,7 @@ export function DiscoveryPanel({
                   size={16}
                   style={{
                     position: 'absolute',
-                    left: '12px',
+                    left: '14px',
                     top: '50%',
                     transform: 'translateY(-50%)',
                     color: '#f59e0b'
@@ -492,17 +537,16 @@ export function DiscoveryPanel({
                   onChange={(e) => handleTripSearch(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
                   placeholder="Enter destination..."
+                  className="input-glass"
                   style={{
                     width: '100%',
-                    height: '44px',
-                    paddingLeft: '38px',
-                    paddingRight: tripSearchQuery ? '38px' : '12px',
+                    height: '48px',
+                    paddingLeft: '42px',
+                    paddingRight: tripSearchQuery ? '42px' : '14px',
                     fontSize: '14px',
-                    background: 'var(--color-dark-lighter)',
+                    borderRadius: '14px',
                     border: '2px solid #f59e0b',
-                    borderRadius: '10px',
-                    color: 'var(--color-text)',
-                    outline: 'none'
+                    background: 'rgba(245, 158, 11, 0.1)'
                   }}
                 />
                 {tripSearchQuery && (
@@ -514,14 +558,18 @@ export function DiscoveryPanel({
                     }}
                     style={{
                       position: 'absolute',
-                      right: '8px',
+                      right: '10px',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      padding: '4px',
-                      background: 'none',
+                      padding: '6px',
+                      background: 'rgba(255, 255, 255, 0.1)',
                       border: 'none',
+                      borderRadius: '8px',
                       cursor: 'pointer',
-                      color: 'var(--color-text-muted)'
+                      color: 'var(--color-text-muted)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}
                   >
                     <X size={14} />
@@ -533,7 +581,7 @@ export function DiscoveryPanel({
                     className="animate-spin"
                     style={{
                       position: 'absolute',
-                      right: tripSearchQuery ? '32px' : '12px',
+                      right: tripSearchQuery ? '44px' : '14px',
                       top: '50%',
                       transform: 'translateY(-50%)',
                       color: '#f59e0b'
@@ -544,18 +592,14 @@ export function DiscoveryPanel({
 
               {/* Trip Search Results Dropdown */}
               {showTripResults && tripSearchResults.length > 0 && (
-                <div style={{
+                <div className="dropdown-menu animate-slide-down" style={{
                   position: 'absolute',
-                  top: 'calc(100% + 4px)',
+                  top: 'calc(100% + 6px)',
                   left: 0,
                   right: 0,
-                  background: 'var(--color-dark-card)',
-                  border: '1px solid #f59e0b',
-                  borderRadius: '10px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                  zIndex: 100,
                   maxHeight: '200px',
-                  overflowY: 'auto'
+                  overflowY: 'auto',
+                  borderColor: 'rgba(245, 158, 11, 0.3)'
                 }}>
                   {tripSearchResults.map(result => (
                     <button
@@ -564,19 +608,8 @@ export function DiscoveryPanel({
                         e.stopPropagation();
                         handleSelectTripDestination(result);
                       }}
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderBottom: '1px solid var(--color-dark-lighter)',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        color: 'var(--color-text)'
-                      }}
+                      className="dropdown-item"
+                      style={{ padding: '12px 14px' }}
                     >
                       <MapPin size={14} color="#f59e0b" style={{ flexShrink: 0 }} />
                       <span style={{
@@ -595,15 +628,27 @@ export function DiscoveryPanel({
               {/* Trip info when destination is set */}
               {tripDestination && tripSongsCount > 0 && (
                 <div style={{
-                  marginTop: '12px',
-                  padding: '12px',
+                  marginTop: '14px',
+                  padding: '14px',
                   background: 'rgba(245, 158, 11, 0.1)',
-                  borderRadius: '10px',
+                  borderRadius: '14px',
+                  border: '1px solid rgba(245, 158, 11, 0.2)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px'
+                  gap: '12px'
                 }}>
-                  <Music size={18} color="#f59e0b" />
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    background: 'var(--gradient-sunset)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Music size={18} color="white" />
+                  </div>
                   <div>
                     <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--color-text)' }}>
                       {tripSongsCount} {tripSongsCount === 1 ? 'song' : 'songs'} on your route!
@@ -620,15 +665,22 @@ export function DiscoveryPanel({
           {/* Location Search (hidden in trip mode) */}
           {mode !== 'trip' && (
           <div ref={searchRef} style={{ position: 'relative' }}>
-            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            <p style={{
+              fontSize: '11px',
+              color: 'var(--color-text-muted)',
+              marginBottom: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              fontWeight: 500
+            }}>
               Jump to Location
             </p>
             <div style={{ position: 'relative' }}>
-              <Search 
-                size={16} 
+              <Search
+                size={16}
                 style={{
                   position: 'absolute',
-                  left: '12px',
+                  left: '14px',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   color: 'var(--color-text-muted)'
@@ -640,17 +692,14 @@ export function DiscoveryPanel({
                 onChange={(e) => handleSearch(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Search any place..."
+                className="input-glass"
                 style={{
                   width: '100%',
-                  height: '40px',
-                  paddingLeft: '38px',
-                  paddingRight: searchQuery ? '38px' : '12px',
+                  height: '44px',
+                  paddingLeft: '42px',
+                  paddingRight: searchQuery ? '42px' : '14px',
                   fontSize: '13px',
-                  background: 'var(--color-dark-lighter)',
-                  border: '1px solid transparent',
-                  borderRadius: '10px',
-                  color: 'var(--color-text)',
-                  outline: 'none'
+                  borderRadius: '12px'
                 }}
               />
               {searchQuery && (
@@ -662,26 +711,30 @@ export function DiscoveryPanel({
                   }}
                   style={{
                     position: 'absolute',
-                    right: '8px',
+                    right: '10px',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    padding: '4px',
-                    background: 'none',
+                    padding: '6px',
+                    background: 'rgba(255, 255, 255, 0.1)',
                     border: 'none',
+                    borderRadius: '8px',
                     cursor: 'pointer',
-                    color: 'var(--color-text-muted)'
+                    color: 'var(--color-text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
                   <X size={14} />
                 </button>
               )}
               {isSearching && (
-                <Loader2 
-                  size={16} 
+                <Loader2
+                  size={16}
                   className="animate-spin"
                   style={{
                     position: 'absolute',
-                    right: searchQuery ? '32px' : '12px',
+                    right: searchQuery ? '44px' : '14px',
                     top: '50%',
                     transform: 'translateY(-50%)',
                     color: 'var(--color-text-muted)'
@@ -692,16 +745,11 @@ export function DiscoveryPanel({
 
             {/* Search Results Dropdown */}
             {showResults && searchResults.length > 0 && (
-              <div style={{
+              <div className="dropdown-menu animate-slide-down" style={{
                 position: 'absolute',
-                top: 'calc(100% + 4px)',
+                top: 'calc(100% + 6px)',
                 left: 0,
                 right: 0,
-                background: 'var(--color-dark-card)',
-                border: '1px solid var(--color-dark-lighter)',
-                borderRadius: '10px',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                zIndex: 100,
                 maxHeight: '200px',
                 overflowY: 'auto'
               }}>
@@ -712,22 +760,11 @@ export function DiscoveryPanel({
                       e.stopPropagation();
                       handleSelectLocation(result);
                     }}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      background: 'transparent',
-                      border: 'none',
-                      borderBottom: '1px solid var(--color-dark-lighter)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      color: 'var(--color-text)'
-                    }}
+                    className="dropdown-item"
+                    style={{ padding: '12px 14px' }}
                   >
                     <MapPin size={14} color="var(--color-text-muted)" style={{ flexShrink: 0 }} />
-                    <span style={{ 
+                    <span style={{
                       fontSize: '13px',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -750,25 +787,21 @@ export function DiscoveryPanel({
               onUseMyLocation();
               onModeChange('nearby');
             }}
+            className="btn-glass"
             style={{
               width: '100%',
-              marginTop: '12px',
-              padding: '10px',
+              marginTop: '14px',
+              padding: '12px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '8px',
-              background: 'var(--color-dark-lighter)',
-              border: 'none',
-              borderRadius: '10px',
-              color: 'var(--color-text-muted)',
+              borderRadius: '12px',
               fontSize: '13px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 150ms ease'
+              fontWeight: 500
             }}
           >
-            <Navigation size={14} />
+            <Navigation size={16} />
             Use My Location
           </button>
           )}
