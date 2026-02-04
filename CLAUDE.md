@@ -56,8 +56,16 @@ Soundscape is a location-based music discovery app built with React 19, TypeScri
 ### Spotify Integration
 
 - OAuth PKCE flow for user authentication (no client secret in browser)
-- `lib/spotify.ts` handles token management, track info fetching via oEmbed (no auth required), and search
+- `lib/spotify.ts` handles token management, track info fetching via song.link API, and search
 - Track playback requires Premium for full songs; Free users get 30-second previews via embed
+- Track metadata fetched via song.link API (proxied through `/api/songlink` to avoid CORS)
+
+### Song.link CORS Proxy
+
+- **`api/songlink.ts`**: Vercel Edge Function that proxies song.link API requests server-side
+- All song.link API calls go through `/api/songlink?url=...` to avoid CORS issues
+- Vite dev server proxies these requests directly to song.link (configured in `vite.config.ts`)
+- Used by: `lib/spotifyLookup.ts`, `lib/spotify.ts`, `lib/providers/spotify.ts`
 
 ## UI Testing Requirements
 
@@ -127,8 +135,14 @@ interface SongLocation {
 
 - Songs without `spotifyUri` cannot be played
 - Album art URLs containing `i.scdn.co` are cached Spotify images; others trigger re-fetch
-- Rate limiting on Spotify oEmbed: requests are batched with 2-second delays
-- Row Level Security enforces that users can only edit their own songs; admins can edit all
+- Rate limiting on song.link API: requests are batched with 1.5-second delays
+- Row Level Security enforces that users can only edit their own songs; admins can edit/insert all
+
+### RLS Policies on `songs` table
+- SELECT: Anyone can read live songs, users can read their own, admins can read all
+- INSERT: Users can insert with matching `user_id`, **admins can insert any song**
+- UPDATE: Users can update own songs, admins can update all
+- DELETE: Users can delete own songs, admins can delete all
 
 ## Recent Features (Feb 2026)
 
@@ -159,6 +173,23 @@ interface SongLocation {
 - Get Directions button (Google Maps walking route)
 - Street View button
 - Native share via Web Share API on mobile, clipboard fallback on desktop
+
+### Admin Panel Import/Export (`AdminPanel.tsx`, `lib/spotifyLookup.ts`)
+- **CSV Import**: Import songs with just title, artist, lat, lng, location_name, location_description
+  - Auto-populates: id, spotify_uri, album, album_art via iTunes + song.link lookup
+  - Duplicate detection (case-insensitive, handles partial artist matches)
+  - Validation with warnings for suspicious data (short titles, missing fields)
+  - Review step for low-confidence matches before import
+- **CSV Export**: Export all songs to CSV for backup/editing
+- **Spotify URI Lookup** (`lib/spotifyLookup.ts`):
+  - Uses iTunes Search API (free, CORS-friendly) to find songs
+  - Passes iTunes URL to song.link API to get Spotify URI
+  - Returns confidence level (high/medium/low) based on title/artist match
+  - Also extracts YouTube ID, Apple Music ID, album art
+- **Metadata Verification**:
+  - Batch check songs with Spotify URIs against song.link metadata
+  - Identifies mismatches in title/artist/album
+  - One-click fix to update corrupted metadata from Spotify source
 
 ## Git Workflow Notes
 
