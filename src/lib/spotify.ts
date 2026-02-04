@@ -277,55 +277,77 @@ export async function getSpotifyUserProfile(): Promise<{ display_name: string; i
 }
 
 /**
- * Fetch track info from Spotify's oEmbed API (no authentication required!)
- * This gives us title and album art for any public track
- * Includes retry logic for rate limiting
+ * Fetch track info via song.link API (CORS-friendly)
+ * This gives us title, artist, and album art for any public track
+ * Uses song.link → iTunes/Spotify metadata
  */
 export async function getTrackInfo(
-  trackId: string, 
-  retries: number = 2
+  trackId: string,
+  _retries: number = 2
 ): Promise<{ title: string; artist: string; albumArt: string } | null> {
   try {
-    const response = await fetch(
-      `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`
-    );
-    
+    const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
+    const encoded = encodeURIComponent(spotifyUrl);
+
+    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+
     // Handle rate limiting with retry
     if (response.status === 429) {
-      if (retries > 0) {
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '5');
-        console.log(`Rate limited, waiting ${retryAfter}s before retry...`);
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
-        return getTrackInfo(trackId, retries - 1);
-      }
-      console.error('Rate limit exceeded, no retries left');
-      return null;
+      console.log('Rate limited by song.link, waiting 5s...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      return getTrackInfo(trackId, 0);
     }
-    
+
     if (!response.ok) {
-      console.error('oEmbed fetch failed:', response.status);
+      console.error('song.link fetch failed:', response.status);
       return null;
     }
-    
+
     const data = await response.json();
-    
-    // Spotify oEmbed only returns track title, NOT artist
-    // Clean up title by removing remaster/version suffixes
-    let title = data.title || '';
-    
-    // Remove common suffixes like "- 2011 Remaster", "(2019 Remaster)", etc.
+
+    // Get metadata from entities
+    const entities = data.entitiesByUniqueId || {};
+    let title = '';
+    let artist = '';
+    let albumArt = '';
+
+    // Try iTunes/Apple Music first (best metadata)
+    for (const [entityId, entity] of Object.entries(entities)) {
+      if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
+        const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
+        title = e.title || '';
+        artist = e.artistName || '';
+        albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || '';
+        break;
+      }
+    }
+
+    // Fallback to Spotify entity
+    if (!title) {
+      for (const [entityId, entity] of Object.entries(entities)) {
+        if (entityId.startsWith('SPOTIFY_SONG::')) {
+          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
+          title = e.title || '';
+          artist = e.artistName || '';
+          albumArt = e.thumbnailUrl || '';
+          break;
+        }
+      }
+    }
+
+    if (!title) {
+      return null;
+    }
+
+    // Clean up title (remove remaster suffixes)
     title = title
       .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
       .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
       .replace(/\s*-\s*Remaster(ed)?/gi, '')
       .replace(/\s*\(Remaster(ed)?\)/gi, '')
       .trim();
-    
-    return {
-      title,
-      artist: '', // oEmbed doesn't provide artist - user must enter manually
-      albumArt: data.thumbnail_url
-    };
+
+    return { title, artist, albumArt };
   } catch (error) {
     console.error('Failed to fetch track info:', error);
     return null;

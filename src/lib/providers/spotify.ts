@@ -45,14 +45,15 @@ export const spotifyAdapter: MusicProviderAdapter = {
 
   async getTrackInfo(id: string): Promise<ProviderTrackInfo | null> {
     try {
-      const response = await fetch(
-        `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${id}`
-      );
+      // Use song.link API (CORS-friendly) instead of Spotify oEmbed
+      const spotifyUrl = `https://open.spotify.com/track/${id}`;
+      const encoded = encodeURIComponent(spotifyUrl);
+
+      const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
 
       if (response.status === 429) {
         // Rate limited - wait and retry once
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '5');
-        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        await new Promise(resolve => setTimeout(resolve, 5000));
         return this.getTrackInfo(id);
       }
 
@@ -61,9 +62,39 @@ export const spotifyAdapter: MusicProviderAdapter = {
       }
 
       const data = await response.json();
+      const entities = data.entitiesByUniqueId || {};
+
+      let title = '';
+      let artist = '';
+      let albumArt = '';
+
+      // Try iTunes/Apple Music first
+      for (const [entityId, entity] of Object.entries(entities)) {
+        if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
+          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
+          title = e.title || '';
+          artist = e.artistName || '';
+          albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || '';
+          break;
+        }
+      }
+
+      // Fallback to Spotify entity
+      if (!title) {
+        for (const [entityId, entity] of Object.entries(entities)) {
+          if (entityId.startsWith('SPOTIFY_SONG::')) {
+            const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
+            title = e.title || '';
+            artist = e.artistName || '';
+            albumArt = e.thumbnailUrl || '';
+            break;
+          }
+        }
+      }
+
+      if (!title) return null;
 
       // Clean up title (remove remaster suffixes)
-      let title = data.title || '';
       title = title
         .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
         .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
@@ -71,11 +102,7 @@ export const spotifyAdapter: MusicProviderAdapter = {
         .replace(/\s*\(Remaster(ed)?\)/gi, '')
         .trim();
 
-      return {
-        title,
-        artist: '', // oEmbed doesn't provide artist
-        albumArt: data.thumbnail_url
-      };
+      return { title, artist, albumArt };
     } catch (error) {
       console.error('Spotify getTrackInfo error:', error);
       return null;

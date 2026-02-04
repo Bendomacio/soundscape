@@ -495,3 +495,77 @@ export async function batchVerifyMetadata(
 
   return results;
 }
+
+/**
+ * Get album art and basic info from Spotify track ID via song.link
+ * CORS-friendly alternative to Spotify oEmbed
+ */
+export async function getSpotifyTrackInfo(
+  trackId: string
+): Promise<{ title: string; artist: string; albumArt: string | null } | null> {
+  try {
+    const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
+    const encoded = encodeURIComponent(spotifyUrl);
+
+    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        // Rate limited - wait and retry once
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        return getSpotifyTrackInfo(trackId);
+      }
+      console.warn('song.link lookup failed:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // Get metadata from entities
+    const entities = data.entitiesByUniqueId || {};
+    let title = '';
+    let artist = '';
+    let albumArt: string | null = null;
+
+    // Try iTunes/Apple Music first (best metadata)
+    for (const [entityId, entity] of Object.entries(entities)) {
+      if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
+        const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
+        title = e.title || '';
+        artist = e.artistName || '';
+        albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || null;
+        break;
+      }
+    }
+
+    // Fallback to Spotify entity
+    if (!title) {
+      for (const [entityId, entity] of Object.entries(entities)) {
+        if (entityId.startsWith('SPOTIFY_SONG::')) {
+          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
+          title = e.title || '';
+          artist = e.artistName || '';
+          albumArt = e.thumbnailUrl || null;
+          break;
+        }
+      }
+    }
+
+    if (!title) {
+      return null;
+    }
+
+    // Clean up title (remove remaster suffixes)
+    title = title
+      .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
+      .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
+      .replace(/\s*-\s*Remaster(ed)?/gi, '')
+      .replace(/\s*\(Remaster(ed)?\)/gi, '')
+      .trim();
+
+    return { title, artist, albumArt };
+  } catch (error) {
+    console.error('getSpotifyTrackInfo error:', error);
+    return null;
+  }
+}
