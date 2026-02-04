@@ -121,11 +121,12 @@ async function searchItunes(title: string, artist: string): Promise<ITunesResult
 
 /**
  * Get cross-platform links from song.link/Odesli
+ * Uses proxy endpoint to avoid CORS issues
  */
 async function getSongLinks(itunesUrl: string): Promise<SongLinkResponse | null> {
   try {
     const encoded = encodeURIComponent(itunesUrl);
-    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+    const response = await fetch(`/api/songlink?url=${encoded}`);
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -377,9 +378,9 @@ export async function verifySpotifyMetadata(
     const trackId = spotifyUri.replace('spotify:track:', '');
     const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
 
-    // Use song.link to get cross-platform data
+    // Use song.link to get cross-platform data (via proxy to avoid CORS)
     const encoded = encodeURIComponent(spotifyUrl);
-    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+    const response = await fetch(`/api/songlink?url=${encoded}`);
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -507,7 +508,8 @@ export async function getSpotifyTrackInfo(
     const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
     const encoded = encodeURIComponent(spotifyUrl);
 
-    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+    // Use proxy endpoint to avoid CORS issues
+    const response = await fetch(`/api/songlink?url=${encoded}`);
 
     if (!response.ok) {
       if (response.status === 429) {

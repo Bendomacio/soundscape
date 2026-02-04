@@ -289,7 +289,8 @@ export async function getTrackInfo(
     const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
     const encoded = encodeURIComponent(spotifyUrl);
 
-    const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+    // Use proxy endpoint to avoid CORS issues
+    const response = await fetch(`/api/songlink?url=${encoded}`);
 
     // Handle rate limiting with retry
     if (response.status === 429) {

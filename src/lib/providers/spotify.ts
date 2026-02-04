@@ -45,11 +45,11 @@ export const spotifyAdapter: MusicProviderAdapter = {
 
   async getTrackInfo(id: string): Promise<ProviderTrackInfo | null> {
     try {
-      // Use song.link API (CORS-friendly) instead of Spotify oEmbed
+      // Use song.link API via proxy to avoid CORS issues
       const spotifyUrl = `https://open.spotify.com/track/${id}`;
       const encoded = encodeURIComponent(spotifyUrl);
 
-      const response = await fetch(`https://api.song.link/v1-alpha.1/links?url=${encoded}`);
+      const response = await fetch(`/api/songlink?url=${encoded}`);
 
       if (response.status === 429) {
         // Rate limited - wait and retry once
