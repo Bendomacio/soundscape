@@ -409,6 +409,7 @@ export function WelcomeModal({ isOpen, onClose }: WelcomeModalProps) {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '10px',
+              padding: '14px 24px',
               background: 'var(--gradient-primary)',
               color: 'white',
               fontSize: '16px',

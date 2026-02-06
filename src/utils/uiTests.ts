@@ -62,9 +62,11 @@ const CSS_TESTS = {
       const paddingLeft = parseInt(style.paddingLeft);
       const paddingRight = parseInt(style.paddingRight);
       const text = (btn as HTMLElement).innerText?.trim();
-      
-      // Skip icon-only buttons (no text)
+
+      // Skip icon-only buttons (no text or text hidden via CSS)
       if (!text || text.length === 0) continue;
+      const btnStyle = window.getComputedStyle(btn);
+      if (btnStyle.fontSize === '0px' || btn.clientWidth === 0 || btn.clientHeight === 0) continue;
       
       // Check padding for buttons with text
       if (paddingLeft < 8 || paddingRight < 8) {
@@ -99,18 +101,62 @@ const CSS_TESTS = {
 
   // Check badges/pills have proper sizing
   badgesHaveProperSizing: () => {
-    const badges = document.querySelectorAll('[class*="rounded-full"], span[style*="border-radius: 9999px"]');
+    const badges = document.querySelectorAll('.badge, [class*="rounded-full"], span[style*="border-radius: 9999px"], span[style*="border-radius:9999px"]');
     for (const badge of badges) {
       const text = (badge as HTMLElement).innerText?.trim();
       if (!text || text.length < 3) continue; // Skip icon-only badges
-      
+
       const style = window.getComputedStyle(badge);
       const paddingLeft = parseInt(style.paddingLeft);
       const paddingRight = parseInt(style.paddingRight);
-      
-      // Badges with text should have at least 10px padding
+
+      // Badges with text should have at least 10px horizontal padding
       if (paddingLeft < 10 || paddingRight < 10) {
         return { passed: false, error: `Badge "${text.slice(0, 15)}" padding too small: ${paddingLeft}px/${paddingRight}px` };
+      }
+    }
+    return { passed: true };
+  },
+
+  // Check fixed header elements are opaque enough to prevent map bleed-through
+  headerOpacity: () => {
+    const header = document.querySelector('header');
+    if (!header) return { passed: true };
+
+    const children = header.querySelectorAll('[class*="pointer-events-auto"]');
+    for (const child of children) {
+      const style = window.getComputedStyle(child);
+      const bg = style.backgroundColor;
+
+      // Parse rgba to check opacity — bg format: rgba(r, g, b, a) or rgb(r, g, b)
+      const rgbaMatch = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+      if (rgbaMatch) {
+        const alpha = rgbaMatch[4] !== undefined ? parseFloat(rgbaMatch[4]) : 1;
+        if (alpha < 0.9) {
+          return { passed: false, error: `Header element bg opacity ${alpha} < 0.9 — map markers will bleed through` };
+        }
+      }
+    }
+    return { passed: true };
+  },
+
+  // Check fixed elements don't overlap each other
+  fixedElementsNoOverlap: () => {
+    const fixedEls = document.querySelectorAll('header [class*="pointer-events-auto"]');
+    const rects: { el: Element; rect: DOMRect }[] = [];
+
+    for (const el of fixedEls) {
+      rects.push({ el, rect: el.getBoundingClientRect() });
+    }
+
+    for (let i = 0; i < rects.length; i++) {
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i].rect;
+        const b = rects[j].rect;
+        const overlap = !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
+        if (overlap) {
+          return { passed: false, error: `Header elements overlap at (${Math.round(a.right)},${Math.round(a.top)}) and (${Math.round(b.left)},${Math.round(b.top)})` };
+        }
       }
     }
     return { passed: true };
