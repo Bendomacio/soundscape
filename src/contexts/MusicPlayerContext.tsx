@@ -641,12 +641,23 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const togglePlayPause = useCallback(async () => {
     if (state.currentProvider === 'spotify') {
       if (playerRef.current && connection.isPremium) {
-        await playerRef.current.togglePlay();
+        // Optimistically toggle UI state — SDK player_state_changed will correct if needed
+        setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
+        try {
+          await playerRef.current.togglePlay();
+        } catch (err) {
+          logger.warn('SDK togglePlay failed, reverting state', err);
+          setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
+        }
       } else if (embedControllerRef.current) {
+        // Optimistically toggle UI state — embed playback_update will correct if needed
+        setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
         try {
           embedControllerRef.current.togglePlay();
         } catch (err) {
           logger.warn('Failed to toggle play on embed controller', err);
+          // Revert optimistic update and fall back to explicit pause/resume
+          setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
           state.isPlaying ? pause() : resume();
         }
       } else if (state.currentSong) {

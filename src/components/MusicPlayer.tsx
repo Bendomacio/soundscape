@@ -90,76 +90,67 @@ export function MusicPlayer({
           padding: '14px 16px',
         }}>
           <div style={{
-            maxWidth: '512px',
-            margin: '0 auto',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '12px',
           }}>
-            {/* Icon / shuffle button */}
-            {hasSongs ? (
-              <button
-                onClick={onShuffle}
-                aria-label="Shuffle"
-                title="Play random song"
-                style={{
-                  width: '44px',
-                  height: '44px',
-                  padding: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: '12px',
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--color-primary)',
-                  flexShrink: 0,
-                  transition: 'opacity 0.2s ease',
-                }}
-              >
-                <Shuffle size={20} />
-              </button>
-            ) : (
-              <div style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '12px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}>
-                <MapPin size={20} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
-              </div>
-            )}
-
-            {/* Message text */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Message text - centered */}
+            <div style={{ textAlign: 'center' }}>
               <p style={{
                 fontSize: '14px',
                 fontWeight: 500,
                 color: 'var(--color-text)',
                 margin: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
               }}>
+                {hasSongs && <Shuffle size={14} style={{ color: 'var(--color-primary)', opacity: 0.7 }} />}
+                {!hasSongs && <MapPin size={14} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />}
                 {message}
               </p>
               <p style={{
                 fontSize: '12px',
                 color: 'var(--color-text-muted)',
-                margin: '2px 0 0 0',
+                margin: '3px 0 0 0',
                 opacity: 0.7,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
               }}>
                 {hint}
               </p>
             </div>
+
+            {/* Shuffle button */}
+            {hasSongs && (
+              <button
+                onClick={onShuffle}
+                aria-label="Shuffle"
+                title="Play random song"
+                style={{
+                  height: '34px',
+                  padding: '0 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  borderRadius: '10px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  cursor: 'pointer',
+                  color: 'var(--color-primary)',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  flexShrink: 0,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <Shuffle size={14} />
+                <span>Shuffle</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

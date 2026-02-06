@@ -108,7 +108,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
 
   return (
     <header className="fixed top-0 left-0 right-0 z-30 pointer-events-none">
-      <div className="flex items-center justify-between p-4">
+      <div className="flex items-center justify-between" style={{ padding: '16px' }}>
         {/* Logo - Glassmorphism card */}
         <div className="pointer-events-auto header-logo" style={{
           display: 'flex',

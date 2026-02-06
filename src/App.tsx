@@ -15,7 +15,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlayerContext';
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
-import { getTrackInfo, handleSpotifyCallback } from './lib/spotify';
+import { getTrackInfo, handleSpotifyCallback, RateLimitError } from './lib/spotify';
 import { handleYouTubeCallback } from './lib/providers/auth';
 
 // Force Vercel rebuild - provider linking feature
@@ -212,49 +212,42 @@ function AppContent() {
       console.log(`Fetching album art for ${songsNeedingArt.length} songs (rate limited)...`);
 
       // Process one at a time with delays to avoid rate limiting (429 errors)
-      const BATCH_SIZE = 1;  // Process one song at a time
-      const DELAY_MS = 2000; // 2 seconds between requests
+      const DELAY_MS = 3000; // 3 seconds between requests
+      let rateLimited = false;
 
-      for (let i = 0; i < songsNeedingArt.length; i += BATCH_SIZE) {
-        if (aborted) return;
-        const batch = songsNeedingArt.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < songsNeedingArt.length; i++) {
+        if (aborted || rateLimited) break;
+        const song = songsNeedingArt[i];
+        const trackId = song.spotifyUri?.replace('spotify:track:', '');
+        if (!trackId) continue;
 
-        // Process batch in parallel
-        const results = await Promise.all(
-          batch.map(async (song) => {
-            const trackId = song.spotifyUri?.replace('spotify:track:', '');
-            if (!trackId) return null;
-
-            try {
-              const trackInfo = await getTrackInfo(trackId);
-              if (trackInfo?.albumArt) {
-                return { songId: song.id, albumArt: trackInfo.albumArt };
-              }
-            } catch (err) {
-              console.warn(`Failed to fetch art for ${song.title}`);
-            }
-            return null;
-          })
-        );
-
-        // Update local state and persist to database
-        for (const result of results) {
-          if (result && !aborted) {
+        try {
+          const trackInfo = await getTrackInfo(trackId);
+          if (trackInfo?.albumArt && !aborted) {
             setSongs(prev => prev.map(s =>
-              s.id === result.songId ? { ...s, albumArt: result.albumArt } : s
+              s.id === song.id ? { ...s, albumArt: trackInfo.albumArt } : s
             ));
-            // Cache in database so we don't need to fetch again
-            updateSong(result.songId, { albumArt: result.albumArt });
+            updateSong(song.id, { albumArt: trackInfo.albumArt });
           }
+        } catch (err) {
+          if (err instanceof RateLimitError) {
+            console.warn(`Rate limited by song.link after ${i} songs — stopping album art fetch`);
+            rateLimited = true;
+            break;
+          }
+          console.warn(`Failed to fetch art for ${song.title}`);
         }
 
-        // Wait before next batch (if not last batch)
-        if (i + BATCH_SIZE < songsNeedingArt.length) {
+        // Wait before next request (if not last)
+        if (i + 1 < songsNeedingArt.length) {
           await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
       }
 
-      console.log('Album art fetch complete');
+      console.log(rateLimited
+        ? `Album art fetch paused (rate limited) — got ${songsNeedingArt.length} songs remaining`
+        : 'Album art fetch complete'
+      );
     }
 
     // Clear old caches and preload images

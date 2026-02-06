@@ -282,10 +282,16 @@ export async function getSpotifyUserProfile(): Promise<{ display_name: string; i
   }
 }
 
+/** Thrown when song.link rate limit is exhausted so callers can abort batch operations */
+export class RateLimitError extends Error {
+  constructor() { super('song.link rate limit exceeded'); this.name = 'RateLimitError'; }
+}
+
 /**
  * Fetch track info via song.link API (CORS-friendly)
  * This gives us title, artist, and album art for any public track
  * Uses song.link → iTunes/Spotify metadata
+ * Throws RateLimitError if retries are exhausted (callers should stop batching)
  */
 export async function getTrackInfo(
   trackId: string,
@@ -302,7 +308,7 @@ export async function getTrackInfo(
     if (response.status === 429) {
       if (retries <= 0) {
         logger.error('song.link rate limit retries exhausted');
-        return null;
+        throw new RateLimitError();
       }
       logger.debug('Rate limited by song.link, waiting 5s...');
       await new Promise(resolve => setTimeout(resolve, 5000));
@@ -323,6 +329,7 @@ export async function getTrackInfo(
 
     return { title: parsed.title, artist: parsed.artist, albumArt: parsed.albumArt };
   } catch (error) {
+    if (error instanceof RateLimitError) throw error;
     logger.error('Failed to fetch track info:', error);
     return null;
   }
