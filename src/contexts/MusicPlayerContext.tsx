@@ -82,6 +82,8 @@ interface MusicPlayerContextType extends MusicPlayerState {
   setSoundCloudPremiumStatus: (isPremium: boolean) => void;
   // Multi-provider support
   setProviderPreference: (provider: MusicProvider) => void;
+  // Song end callback registration
+  registerOnSongEnd: (callback: (() => void) | null) => void;
 }
 
 const MusicPlayerContext = createContext<MusicPlayerContextType | null>(null);
@@ -131,6 +133,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const containerRef = useRef<HTMLDivElement>(null);
   const authRef = useRef<SpotifyUserAuth | null>(null);
   const positionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const onSongEndRef = useRef<(() => void) | null>(null);
 
   // Check connection status on mount
   useEffect(() => {
@@ -292,13 +295,22 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
       const { paused, position, duration } = playerState;
 
-      setState(prev => ({
-        ...prev,
-        isPlaying: !paused,
-        isLoading: false,
-        position,
-        duration
-      }));
+      setState(prev => {
+        // Detect song end: was playing, now paused, and position is near end
+        const wasPlaying = prev.isPlaying;
+        const isNearEnd = duration > 0 && position === 0 && paused;
+        if (wasPlaying && isNearEnd && prev.duration > 0) {
+          // Song ended — fire callback asynchronously
+          setTimeout(() => onSongEndRef.current?.(), 0);
+        }
+        return {
+          ...prev,
+          isPlaying: !paused,
+          isLoading: false,
+          position,
+          duration
+        };
+      });
     });
 
     player.addListener('initialization_error', ({ message }: { message: string }) => {
@@ -465,6 +477,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           if (!e?.data || typeof e.data.isPaused !== 'boolean') return;
           setState(prev => {
             if (prev.currentSong?.id === songId) {
+              // Detect song end for embed: was playing, now paused, position at 0 or near duration
+              const wasPlaying = prev.isPlaying;
+              const dur = e.data.duration || 0;
+              const pos = e.data.position || 0;
+              const isEnded = wasPlaying && e.data.isPaused && dur > 0 && (pos === 0 || pos >= dur - 1000);
+              if (isEnded) {
+                setTimeout(() => onSongEndRef.current?.(), 0);
+              }
               return { ...prev, isPlaying: !e.data.isPaused, isLoading: false };
             }
             return prev;
@@ -818,6 +838,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     logger.debug('Provider preference set to:', provider);
   }, []);
 
+  const registerOnSongEnd = useCallback((callback: (() => void) | null) => {
+    onSongEndRef.current = callback;
+  }, []);
+
   // Show/hide embed container based on whether we're playing
   const showEmbed = state.currentSong && (
     // Show for Spotify embed (non-premium)
@@ -842,8 +866,9 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     disconnectProvider,
     confirmSoundCloud,
     setSoundCloudPremiumStatus,
-    setProviderPreference
-  }), [state, connection, providerConnections, play, pause, resume, togglePlayPause, seek, stop, connectSpotify, disconnectSpotify, connectProvider, disconnectProvider, confirmSoundCloud, setSoundCloudPremiumStatus, setProviderPreference]);
+    setProviderPreference,
+    registerOnSongEnd
+  }), [state, connection, providerConnections, play, pause, resume, togglePlayPause, seek, stop, connectSpotify, disconnectSpotify, connectProvider, disconnectProvider, confirmSoundCloud, setSoundCloudPremiumStatus, setProviderPreference, registerOnSongEnd]);
 
   return (
     <MusicPlayerContext.Provider value={value}>

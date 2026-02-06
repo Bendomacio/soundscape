@@ -110,23 +110,25 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
     <header className="fixed top-0 left-0 right-0 z-30 pointer-events-none">
       <div className="flex items-center justify-between p-4">
         {/* Logo - Glassmorphism card */}
-        <div className="pointer-events-auto glass-light" style={{
+        <div className="pointer-events-auto header-logo" style={{
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
           padding: '10px 16px',
           borderRadius: '16px',
+          background: 'rgba(13, 17, 23, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           boxShadow: 'var(--shadow-lg)'
         }}>
           <div style={{
             width: '40px',
             height: '40px',
-            borderRadius: '12px',
+            borderRadius: '10px',
             background: 'var(--gradient-primary)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: 'var(--shadow-glow-primary)'
+            flexShrink: 0
           }}>
             <Music2 className="w-5 h-5 text-white" />
           </div>
@@ -154,58 +156,68 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3 pointer-events-auto">
-          {/* Admin button - premium glass style */}
+        {/* Actions - opaque container to prevent map bleed-through */}
+        <div className="flex items-center gap-2 pointer-events-auto" style={{
+          padding: '6px',
+          borderRadius: '16px',
+          background: 'rgba(13, 17, 23, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          boxShadow: 'var(--shadow-lg)'
+        }}>
+          {/* Admin button */}
           {isAdmin && (
             <button
               onClick={onAdminClick}
-              className="btn-glass mobile-responsive-btn"
+              className="header-action-btn"
               style={{
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: '8px',
                 padding: '10px 16px',
+                borderRadius: '10px',
+                color: 'var(--color-primary)',
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
                 fontSize: '13px',
                 fontWeight: 600,
-                borderRadius: '12px',
-                color: 'var(--color-primary)',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
+                flexShrink: 0
               }}
               title="Admin Panel"
               aria-label="Admin Panel"
             >
-              <Shield size={16} />
+              <Shield size={18} />
               <span className="hidden sm:inline">Admin</span>
             </button>
           )}
 
-          {/* Submit button - gradient with glow */}
+          {/* Submit button - gradient */}
           <button
             onClick={onSubmitClick}
-            className="btn-gradient mobile-responsive-btn"
+            className="header-action-btn"
             style={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
-              padding: '10px 18px',
-              background: 'linear-gradient(135deg, #F43F5E 0%, #EC4899 50%, #F43F5E 100%)',
-              backgroundSize: '200% 200%',
+              padding: '10px 16px',
+              background: 'linear-gradient(135deg, #F43F5E 0%, #EC4899 100%)',
               color: 'white',
-              fontWeight: 600,
-              fontSize: '13px',
-              borderRadius: '12px',
+              borderRadius: '10px',
               border: 'none',
               cursor: 'pointer',
-              boxShadow: '0 4px 16px rgba(244, 63, 94, 0.4)',
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
+              fontSize: '13px',
+              fontWeight: 600,
+              flexShrink: 0
             }}
             title="Submit Song"
             aria-label="Submit Song"
           >
             <Plus size={18} strokeWidth={2.5} />
-            <span className="hidden sm:inline">Submit Song</span>
+            <span className="hidden sm:inline">Submit</span>
           </button>
 
           {/* Dev Login Menu (only in dev mode when not logged in) */}
@@ -213,23 +225,25 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
             <div className="relative" ref={devMenuRef}>
               <button
                 onClick={() => setShowDevMenu(!showDevMenu)}
-                className="glass-light"
+                className="header-action-btn"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 12px',
-                  borderRadius: '12px',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '10px 16px',
+                  borderRadius: '10px',
                   cursor: 'pointer',
-                  fontSize: '12px',
-                  fontWeight: 500,
                   color: '#F59E0B',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  background: 'rgba(245, 158, 11, 0.1)'
+                  border: 'none',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  flexShrink: 0
                 }}
                 title="Dev Login Options"
               >
-                <Shield size={14} />
+                <Shield size={18} />
                 <span className="hidden sm:inline">Dev Login</span>
               </button>
 
@@ -299,19 +313,23 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
           <div className="relative" ref={menuRef} style={{ display: isDevMode && !user ? 'none' : 'block' }}>
             <button
               onClick={() => user ? setShowUserMenu(!showUserMenu) : onLoginClick()}
-              className="glass-light"
+              className="header-action-btn"
               aria-label={user ? 'User profile menu' : 'Sign in'}
               style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '12px',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                gap: '8px',
                 cursor: 'pointer',
                 overflow: 'hidden',
-                padding: user ? '3px' : '0',
-                transition: 'all 0.2s ease'
+                padding: user ? '3px' : '10px 16px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                transition: 'all 0.2s ease',
+                fontSize: '13px',
+                fontWeight: 600,
+                flexShrink: 0
               }}
             >
               {user ? (
@@ -319,10 +337,13 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                   avatarUrl={profile?.avatar_url}
                   displayName={profile?.display_name}
                   email={user.email}
-                  size={38}
+                  size={34}
                 />
               ) : (
-                <User className="w-5 h-5 text-[var(--color-text-muted)]" />
+                <>
+                  <User className="w-5 h-5 text-[var(--color-text-muted)]" />
+                  <span className="hidden sm:inline" style={{ color: 'var(--color-text-muted)' }}>Sign In</span>
+                </>
               )}
             </button>
 
@@ -335,6 +356,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                   right: 0,
                   top: 'calc(100% + 8px)',
                   width: '280px',
+                  maxWidth: 'calc(100vw - 32px)',
                   maxHeight: '80vh',
                   overflowY: 'auto'
                 }}
@@ -373,14 +395,14 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                       </p>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                         {isAdmin && (
-                          <div className="badge badge-purple" style={{ padding: '2px 8px', fontSize: '10px' }}>
+                          <div className="badge badge-purple" style={{ padding: '2px 10px', fontSize: '10px' }}>
                             <Sparkles size={10} />
                             Administrator
                           </div>
                         )}
                         {isDevSession && (
                           <div style={{
-                            padding: '2px 8px',
+                            padding: '2px 10px',
                             fontSize: '10px',
                             background: 'rgba(245, 158, 11, 0.2)',
                             color: '#F59E0B',
@@ -451,7 +473,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '4px',
-                                    padding: '2px 6px',
+                                    padding: '2px 10px',
                                     background: conn.isPremium ? `${config.color}30` : 'rgba(255, 255, 255, 0.1)',
                                     borderRadius: '4px',
                                     fontSize: '9px',

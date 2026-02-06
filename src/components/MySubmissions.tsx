@@ -152,6 +152,7 @@ export function MySubmissions({ isOpen, onClose, onEditSong }: MySubmissionsProp
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
               padding: '10px',
               background: 'none',
@@ -215,8 +216,8 @@ export function MySubmissions({ isOpen, onClose, onEditSong }: MySubmissionsProp
 
                     {/* Song info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h3 style={{ fontWeight: 500, fontSize: '15px', margin: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <h3 style={{ fontWeight: 500, fontSize: '15px', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {song.title}
                         </h3>
                         <span style={{
@@ -225,7 +226,7 @@ export function MySubmissions({ isOpen, onClose, onEditSong }: MySubmissionsProp
                           gap: '4px',
                           fontSize: '11px',
                           fontWeight: 600,
-                          padding: '2px 8px',
+                          padding: '2px 10px',
                           borderRadius: '4px',
                           background: `${getStatusColor(song.status)}30`,
                           color: getStatusColor(song.status)
@@ -234,11 +235,11 @@ export function MySubmissions({ isOpen, onClose, onEditSong }: MySubmissionsProp
                           {getStatusText(song.status)}
                         </span>
                       </div>
-                      <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '2px 0' }}>
+                      <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {song.artist}
                       </p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                        <MapPin size={12} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <MapPin size={12} style={{ flexShrink: 0 }} />
                         {song.locationName}
                       </div>
                     </div>

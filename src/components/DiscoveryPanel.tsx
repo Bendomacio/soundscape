@@ -283,6 +283,8 @@ export function DiscoveryPanel({
                 fontWeight: 600,
                 margin: 0,
                 whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
                 letterSpacing: '-0.01em'
               }}>
                 {modeConfig.label}
@@ -292,6 +294,8 @@ export function DiscoveryPanel({
                 color: 'var(--color-text-muted)',
                 margin: '2px 0 0 0',
                 whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px'
@@ -352,7 +356,7 @@ export function DiscoveryPanel({
                 }}
                 className={`toggle-item ${radius === preset.value ? 'toggle-item-active' : ''}`}
                 style={{
-                  padding: '8px 6px',
+                  padding: '8px 10px',
                   fontSize: '12px',
                   gap: '4px',
                   ...(radius === preset.value && mode === 'explore' ? { background: 'var(--gradient-purple)' } : {})
@@ -495,6 +499,7 @@ export function DiscoveryPanel({
                   value={radius || 20}
                   onChange={(e) => onRadiusChange(parseInt(e.target.value))}
                   onClick={(e) => e.stopPropagation()}
+                  aria-label={`Search radius: ${radius} kilometers`}
                   style={{
                     position: 'absolute',
                     top: 0,
@@ -549,13 +554,14 @@ export function DiscoveryPanel({
                   onClick={(e) => e.stopPropagation()}
                   placeholder="Enter destination..."
                   className="input-glass"
+                  aria-label="Search trip destination"
                   style={{
                     width: '100%',
-                    height: '48px',
+                    height: '44px',
                     paddingLeft: '42px',
                     paddingRight: tripSearchQuery ? '42px' : '14px',
-                    fontSize: '14px',
-                    borderRadius: '14px',
+                    fontSize: '13px',
+                    borderRadius: '12px',
                     border: '2px solid #f59e0b',
                     background: 'rgba(245, 158, 11, 0.1)'
                   }}
@@ -572,7 +578,7 @@ export function DiscoveryPanel({
                       right: '10px',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      padding: '6px',
+                      padding: '8px',
                       background: 'rgba(255, 255, 255, 0.1)',
                       border: 'none',
                       borderRadius: '8px',
@@ -704,6 +710,7 @@ export function DiscoveryPanel({
                 onClick={(e) => e.stopPropagation()}
                 placeholder="Search any place..."
                 className="input-glass"
+                aria-label="Search location"
                 style={{
                   width: '100%',
                   height: '44px',
@@ -725,7 +732,7 @@ export function DiscoveryPanel({
                     right: '10px',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    padding: '6px',
+                    padding: '8px',
                     background: 'rgba(255, 255, 255, 0.1)',
                     border: 'none',
                     borderRadius: '8px',

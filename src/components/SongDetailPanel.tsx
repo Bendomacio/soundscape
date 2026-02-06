@@ -110,6 +110,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
   const { currentSong, isPlaying, isLoading, play, togglePlayPause } = useSpotifyPlayer();
   const { user, profile } = useAuth();
   const dominantColor = useDominantColor(song.albumArt || FALLBACK_IMAGE);
+  const isDesktop = !isMobile();
 
   // Calculate nearby songs (within 5km, sorted by distance)
   const nearbySongs = useMemo(() => {
@@ -157,27 +158,27 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
   const isThisSongPlaying = currentSong?.id === song.id && isPlaying;
   const isThisSongLoading = currentSong?.id === song.id && isLoading;
 
-  // Load comments when tab changes
+  // Load comments when tab changes (or eagerly on mobile for inline display)
   useEffect(() => {
-    if (activeTab === 'comments' && comments.length === 0) {
+    if ((activeTab === 'comments' || !isDesktop) && comments.length === 0) {
       setLoadingComments(true);
       getComments(song.id).then(data => {
         setComments(data);
         setLoadingComments(false);
       });
     }
-  }, [activeTab, song.id, comments.length]);
+  }, [activeTab, song.id, comments.length, isDesktop]);
 
-  // Load photos when tab changes
+  // Load photos when tab changes (or eagerly on mobile for inline display)
   useEffect(() => {
-    if (activeTab === 'photos' && photos.length === 0) {
+    if ((activeTab === 'photos' || !isDesktop) && photos.length === 0) {
       setLoadingPhotos(true);
       getPhotos(song.id, !!user).then(data => {
         setPhotos(data);
         setLoadingPhotos(false);
       });
     }
-  }, [activeTab, song.id, photos.length, user]);
+  }, [activeTab, song.id, photos.length, user, isDesktop]);
 
   const handlePlayPause = () => {
     if (isThisSongPlaying || isThisSongLoading) {
@@ -312,9 +313,6 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
     return date.toLocaleDateString();
   };
 
-  // Check if on desktop for sidebar display
-  const isDesktop = !isMobile();
-
   return (
     <div
       role="dialog"
@@ -326,9 +324,9 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
       right: 0,
       bottom: 0,
       display: 'flex',
-      alignItems: 'center',
+      alignItems: isDesktop ? 'center' : 'flex-end',
       justifyContent: 'center',
-      padding: '20px',
+      padding: isDesktop ? '20px' : '0',
       zIndex: 9999
     }}>
       {/* Backdrop - darker with more blur */}
@@ -347,11 +345,12 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
       {/* Container for main panel + sidebars */}
       <div
         onClick={e => e.stopPropagation()}
-        className="animate-scale-in"
+        className={isDesktop ? 'animate-scale-in' : 'animate-slide-up'}
         style={{
           display: 'flex',
           gap: '16px',
-          maxHeight: '90vh',
+          maxHeight: isDesktop ? '90vh' : '95vh',
+          width: isDesktop ? undefined : '100%',
           position: 'relative'
         }}
       >
@@ -362,19 +361,37 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           style={{
             position: 'relative',
             width: '100%',
-            maxWidth: '420px',
-            maxHeight: '90vh',
-            borderRadius: '24px',
+            maxWidth: isDesktop ? '420px' : 'none',
+            maxHeight: isDesktop ? '90vh' : '95vh',
+            borderRadius: isDesktop ? '24px' : '20px 20px 0 0',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.7), 0 0 0 1px var(--glass-border)',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column'
           }}
         >
+        {/* Mobile drag handle */}
+        {!isDesktop && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            padding: '10px 0 0',
+            position: 'relative',
+            zIndex: 5
+          }}>
+            <div style={{
+              width: '36px',
+              height: '4px',
+              borderRadius: '2px',
+              background: 'rgba(255,255,255,0.25)',
+            }} />
+          </div>
+        )}
+
         {/* Dynamic gradient header based on album colors - enhanced glow */}
         <div style={{
           position: 'relative',
-          padding: '24px 24px 80px 24px',
+          padding: isDesktop ? '24px 24px 80px 24px' : '8px 20px 60px 20px',
           background: `linear-gradient(180deg, ${dominantColor} 0%, transparent 100%)`
         }}>
           {/* Close button - glass style */}
@@ -403,9 +420,9 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           {/* Hero Album Art with Play Button */}
           <div style={{
             position: 'relative',
-            width: '180px',
-            height: '180px',
-            margin: '20px auto 0',
+            width: isDesktop ? '180px' : '130px',
+            height: isDesktop ? '180px' : '130px',
+            margin: isDesktop ? '20px auto 0' : '8px auto 0',
           }}>
             {/* Glow effect - more vibrant */}
             <div style={{
@@ -485,8 +502,8 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
-            padding: '0 24px 24px', 
-            marginTop: '-40px', 
+            padding: isDesktop ? '0 24px 24px' : '0 16px 90px',
+            marginTop: isDesktop ? '-40px' : '-28px',
             position: 'relative',
             WebkitOverflowScrolling: 'touch'
           }}
@@ -501,7 +518,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                maxWidth: '300px'
+                maxWidth: isDesktop ? '300px' : '100%'
               }}>
                 {song.title}
               </h2>
@@ -693,34 +710,54 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             </div>
           )}
 
-          {/* Tabs - toggle group style */}
-          <div className="toggle-group" style={{ marginTop: '20px' }}>
-            {[
-              { id: 'info' as const, label: 'Info', icon: Compass },
-              { id: 'comments' as const, label: 'Comments', icon: MessageCircle },
-              { id: 'photos' as const, label: 'Photos', icon: Camera }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`toggle-item ${activeTab === tab.id ? 'active' : ''}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                <tab.icon size={15} />
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          {/* Tabs - desktop only */}
+          {isDesktop && (
+            <div className="toggle-group" style={{ marginTop: '20px' }}>
+              {[
+                { id: 'info' as const, label: 'Info', icon: Compass },
+                { id: 'comments' as const, label: 'Comments', icon: MessageCircle },
+                { id: 'photos' as const, label: 'Photos', icon: Camera }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`toggle-item ${activeTab === tab.id ? 'active' : ''}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <tab.icon size={15} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          {/* Tab Content */}
-          <div style={{ marginTop: '16px', minHeight: '150px' }}>
-            {/* Info Tab - Mini map and navigation */}
-            {activeTab === 'info' && (
+          {/* Content — on mobile all sections show inline, on desktop tabs control visibility */}
+          <div style={{ marginTop: '16px', minHeight: isDesktop ? '150px' : undefined }}>
+            {/* Mobile section header: Location */}
+            {!isDesktop && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                marginBottom: '12px', paddingBottom: '10px',
+                borderBottom: '1px solid var(--glass-border)'
+              }}>
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '8px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Navigation size={14} style={{ color: 'var(--color-primary)' }} />
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>Location & Directions</span>
+              </div>
+            )}
+
+            {/* Info / Map section */}
+            {(activeTab === 'info' || !isDesktop) && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {/* Map Preview - glass card */}
                 <div className="glass-light" style={{
@@ -836,8 +873,118 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
               </div>
             )}
 
-            {/* Comments Tab */}
-            {activeTab === 'comments' && (
+            {/* Mobile inline: Songs Nearby */}
+            {!isDesktop && nearbySongs.length > 0 && (
+              <div style={{ marginTop: '24px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  marginBottom: '12px', paddingBottom: '10px',
+                  borderBottom: '1px solid var(--glass-border)'
+                }}>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <Compass size={14} style={{ color: 'var(--color-primary)' }} />
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>Songs Nearby</span>
+                  <span className="badge badge-primary" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: '10px' }}>
+                    {nearbySongs.length}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {nearbySongs.slice(0, 5).map(s => (
+                    <button key={s.id} onClick={() => onSongSelect?.(s)} className="glass-light" style={{
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '10px',
+                      border: 'none', borderRadius: '12px', cursor: 'pointer', textAlign: 'left', width: '100%'
+                    }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                        {s.albumArt
+                          ? <img src={s.albumArt} alt={s.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.05)' }}><Music size={16} color="var(--color-text-muted)" /></div>
+                        }
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.artist}</div>
+                      </div>
+                      <span className="badge badge-primary" style={{ padding: '4px 10px', fontSize: '10px', fontWeight: 600, flexShrink: 0 }}>{formatDistance(s.distance)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mobile inline: Related Songs */}
+            {!isDesktop && relatedSongs.length > 0 && (
+              <div style={{ marginTop: '24px' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  marginBottom: '12px', paddingBottom: '10px',
+                  borderBottom: '1px solid var(--glass-border)'
+                }}>
+                  <div style={{
+                    width: '28px', height: '28px', borderRadius: '8px',
+                    background: 'rgba(139, 92, 246, 0.15)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <Users size={14} style={{ color: '#8B5CF6' }} />
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: 600 }}>More by {song.artist}</span>
+                  <span className="badge badge-purple" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: '10px' }}>
+                    {relatedSongs.length}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {relatedSongs.slice(0, 5).map(s => (
+                    <button key={s.id} onClick={() => onSongSelect?.(s)} className="glass-light" style={{
+                      display: 'flex', alignItems: 'center', gap: '12px', padding: '10px',
+                      border: 'none', borderRadius: '12px', cursor: 'pointer', textAlign: 'left', width: '100%'
+                    }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', overflow: 'hidden', flexShrink: 0, boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                        {s.albumArt
+                          ? <img src={s.albumArt} alt={s.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.05)' }}><Music size={16} color="var(--color-text-muted)" /></div>
+                        }
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: '13px', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <MapPin size={10} />{s.locationName}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mobile section header: Comments */}
+            {!isDesktop && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                marginTop: '24px', marginBottom: '12px', paddingBottom: '10px',
+                borderBottom: '1px solid var(--glass-border)'
+              }}>
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '8px',
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <MessageCircle size={14} style={{ color: '#3B82F6' }} />
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>Comments</span>
+                {comments.length > 0 && (
+                  <span className="badge" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: '10px', background: 'rgba(59, 130, 246, 0.15)', color: '#3B82F6' }}>
+                    {comments.length}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Comments section */}
+            {(activeTab === 'comments' || !isDesktop) && (
               <div>
                 {/* Add comment input - glass style */}
                 {user ? (
@@ -970,8 +1117,31 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
               </div>
             )}
 
-            {/* Photos Tab */}
-            {activeTab === 'photos' && (
+            {/* Mobile section header: Photos */}
+            {!isDesktop && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '10px',
+                marginTop: '24px', marginBottom: '12px', paddingBottom: '10px',
+                borderBottom: '1px solid var(--glass-border)'
+              }}>
+                <div style={{
+                  width: '28px', height: '28px', borderRadius: '8px',
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  <Camera size={14} style={{ color: '#F59E0B' }} />
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>Photos</span>
+                {photos.length > 0 && (
+                  <span className="badge" style={{ marginLeft: 'auto', padding: '2px 10px', fontSize: '10px', background: 'rgba(245, 158, 11, 0.15)', color: '#F59E0B' }}>
+                    {photos.length}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Photos section */}
+            {(activeTab === 'photos' || !isDesktop) && (
               <div>
                 {/* Upload photo - glass dashed border */}
                 {user && (

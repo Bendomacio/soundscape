@@ -207,13 +207,33 @@
     padding: var(--space-sm) var(--space-md) !important;
   }
   
-  /* Hide long text labels on small screens - icon-only buttons */
-  .mobile-responsive-btn {
-    padding: 10px !important;
-    min-width: 44px;
-    min-height: 44px;
+  /* Header action buttons - fixed size, icon-only on mobile */
+  .header-action-btn {
+    width: 40px !important;
+    height: 40px !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+    gap: 0 !important;
   }
-  
+
+  /* Hide text labels in header buttons on mobile */
+  .header-action-btn span {
+    display: none !important;
+  }
+
+  /* Logo compact on mobile - equal padding for centered icon */
+  .header-logo {
+    padding: 8px !important;
+    gap: 0 !important;
+  }
+
+  /* Legacy responsive buttons */
+  .mobile-responsive-btn {
+    padding: 8px !important;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
   .mobile-responsive-btn span {
     display: none !important;
   }
@@ -240,11 +260,11 @@
   
   /* Move map controls to better mobile positions */
   .mapboxgl-ctrl-top-right {
-    top: 60px; /* Below header */
+    top: 68px; /* Below header */
   }
   
   .mapboxgl-ctrl-bottom-right {
-    bottom: 160px; /* Above player */
+    bottom: 160px !important; /* Above player */
   }
 }
 
@@ -256,8 +276,14 @@
     gap: 10px !important;
   }
   
-  /* Smaller album art on mobile */
+  /* Smaller album art on mobile - match container size */
   .music-player-container img {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  /* Match album art container to img size on mobile */
+  .music-player-container .album-art-container {
     width: 48px !important;
     height: 48px !important;
   }
@@ -273,7 +299,7 @@
 /* ---- MOBILE DISCOVERY PANEL ---- */
 @media (max-width: 640px) {
   .discovery-panel {
-    top: 60px !important;
+    top: 68px !important;
     left: 8px !important;
     right: 8px !important;
     width: auto !important;
@@ -289,11 +315,10 @@
     font-size: 11px !important;
   }
   
-  /* Compact buttons */
+  /* Compact buttons - keep 44px touch target */
   .discovery-panel button {
     font-size: 12px !important;
-    padding: 8px 12px !important;
-    min-height: 36px !important;
+    padding: 8px 10px !important;
   }
 }
 

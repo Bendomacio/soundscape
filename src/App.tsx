@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Music2 } from 'lucide-react';
 import './utils/uiTests'; // Auto-runs UI tests in dev mode
 import { MusicMap } from './components/MusicMap';
@@ -146,7 +146,7 @@ function OAuthCallbackHandler() {
 function AppContent() {
   // Auth & Spotify player
   const { user, profile } = useAuth();
-  const { play } = useSpotifyPlayer();
+  const { play, registerOnSongEnd } = useSpotifyPlayer();
   
   // State
   const [songs, setSongs] = useState<SongLocation[]>([]);
@@ -160,7 +160,7 @@ function AppContent() {
   const [showMySubmissions, setShowMySubmissions] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [radius, setRadius] = useState(5);
-  const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore' | 'trip'>('nearby');
+  const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore' | 'trip'>('explore');
 
   // Trip mode state
   const [tripDestination, setTripDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
@@ -322,6 +322,9 @@ function AppContent() {
     }
   }, []);
 
+  // Ref for song-end auto-queue
+  const playedSongIds = useRef<Set<string>>(new Set());
+
   // Calculate songs in radius based on discovery mode
   const songsInRadius = useMemo(() => songs.filter(song => {
     // If radius is 0, show all songs (no filtering)
@@ -350,6 +353,53 @@ function AppContent() {
     const distance = getDistanceKm(centerLat, centerLng, song.latitude, song.longitude);
     return distance <= radius;
   }), [songs, radius, discoveryMode, userLocation, exploreCenter, viewState.latitude, viewState.longitude]);
+
+  // Helper: get playable songs in radius sorted by distance from user
+  const getPlayableSongsByDistance = useCallback(() => {
+    if (!userLocation) return [];
+    return songsInRadius
+      .filter(s => hasPlayableLink(s))
+      .map(s => ({
+        song: s,
+        distance: getDistanceKm(userLocation.latitude, userLocation.longitude, s.latitude, s.longitude)
+      }))
+      .sort((a, b) => a.distance - b.distance)
+      .map(s => s.song);
+  }, [songsInRadius, userLocation]);
+
+  // Auto-queue next song when current one ends
+  useEffect(() => {
+    registerOnSongEnd(() => {
+      const sorted = getPlayableSongsByDistance();
+      // Find next unplayed song
+      const next = sorted.find(s => !playedSongIds.current.has(s.id));
+      if (next) {
+        setCurrentSong(next);
+        setSelectedSong(next);
+        play(next);
+        playedSongIds.current.add(next.id);
+      } else if (sorted.length > 0) {
+        // All songs played — reset and start over
+        playedSongIds.current.clear();
+        const first = sorted[0];
+        setCurrentSong(first);
+        setSelectedSong(first);
+        play(first);
+        playedSongIds.current.add(first.id);
+      }
+    });
+    return () => registerOnSongEnd(null);
+  }, [registerOnSongEnd, getPlayableSongsByDistance, play]);
+
+  // Track played songs when user manually selects — auto-play on select
+  const handleSongSelectTracked = useCallback((song: SongLocation) => {
+    setSelectedSong(song);
+    setCurrentSong(song);
+    playedSongIds.current.add(song.id);
+    if (hasPlayableLink(song)) {
+      play(song);
+    }
+  }, [play]);
 
   // Handle trip destination selection
   const handleTripDestinationSet = useCallback(async (destination: { lat: number; lng: number; name: string }) => {
@@ -416,10 +466,7 @@ function AppContent() {
   }, []);
 
   // Handlers
-  const handleSongSelect = useCallback((song: SongLocation) => {
-    setSelectedSong(song);
-    setCurrentSong(song);
-  }, []);
+  const handleSongSelect = handleSongSelectTracked;
 
   const handleShuffle = useCallback(() => {
     // Only shuffle songs with any playable link
@@ -677,6 +724,8 @@ function AppContent() {
           currentSong={currentSong}
           onSongClick={() => currentSong && setShowDetailPanel(true)}
           onShuffle={handleShuffle}
+          songCount={songsInRadius.filter(s => hasPlayableLink(s)).length}
+          discoveryMode={discoveryMode}
         />
       </ErrorBoundary>
 

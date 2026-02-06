@@ -204,7 +204,7 @@ export function SpotifySearch({ isOpen, onClose, onSelect, initialQuery = '' }: 
                     marginBottom: 'var(--space-md)'
                   }}>
                     <Check size={16} />
-                    Track ID: <code style={{ background: 'var(--color-dark-lighter)', padding: '2px 8px', borderRadius: '4px' }}>{urlTrackId}</code>
+                    Track ID: <code style={{ background: 'var(--color-dark-lighter)', padding: '2px 10px', borderRadius: '4px' }}>{urlTrackId}</code>
                   </div>
                   
                   <div style={{ background: 'var(--color-dark)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>

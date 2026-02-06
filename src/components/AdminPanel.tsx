@@ -507,7 +507,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                 color: 'var(--color-dark)',
                 fontSize: '11px',
                 fontWeight: 700,
-                padding: '2px 6px',
+                padding: '2px 10px',
                 borderRadius: '10px',
                 marginLeft: '4px'
               }}>
@@ -540,7 +540,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                 color: 'var(--color-dark)',
                 fontSize: '11px',
                 fontWeight: 700,
-                padding: '2px 6px',
+                padding: '2px 10px',
                 borderRadius: '10px',
                 marginLeft: '4px'
               }}>
@@ -1259,7 +1259,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                           <span style={{
                             fontSize: '11px',
                             fontWeight: 600,
-                            padding: '2px 8px',
+                            padding: '2px 10px',
                             borderRadius: '4px',
                             background: `${statusColor}30`,
                             color: statusColor
@@ -1933,7 +1933,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                                     key={issue}
                                     style={{
                                       fontSize: '10px',
-                                      padding: '2px 6px',
+                                      padding: '2px 10px',
                                       borderRadius: '4px',
                                       background: ISSUE_LABELS[issue].severity === 'error'
                                         ? 'rgba(239, 68, 68, 0.2)'
@@ -1950,7 +1950,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                           {song._duplicate && (
                             <span style={{
                               fontSize: '11px',
-                              padding: '2px 8px',
+                              padding: '2px 10px',
                               background: 'rgba(245, 158, 11, 0.2)',
                               color: '#f59e0b',
                               borderRadius: '4px',
@@ -1962,7 +1962,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                           {song._excluded && (
                             <span style={{
                               fontSize: '11px',
-                              padding: '2px 8px',
+                              padding: '2px 10px',
                               background: 'rgba(239, 68, 68, 0.2)',
                               color: '#ef4444',
                               borderRadius: '4px',
@@ -2246,7 +2246,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                                 alignItems: 'center',
                                 gap: '4px',
                                 fontSize: '11px',
-                                padding: '2px 8px',
+                                padding: '2px 10px',
                                 background: isLowConfidence ? 'rgba(245, 158, 11, 0.2)' : 'rgba(29, 185, 84, 0.2)',
                                 color: isLowConfidence ? '#f59e0b' : '#1DB954',
                                 borderRadius: '4px'
@@ -2257,7 +2257,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                             ) : (
                               <span style={{
                                 fontSize: '11px',
-                                padding: '2px 8px',
+                                padding: '2px 10px',
                                 background: 'rgba(239, 68, 68, 0.2)',
                                 color: '#ef4444',
                                 borderRadius: '4px'
@@ -2493,7 +2493,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                               alignItems: 'center',
                               gap: '4px',
                               fontSize: '11px',
-                              padding: '2px 8px',
+                              padding: '2px 10px',
                               background: 'rgba(29, 185, 84, 0.2)',
                               color: '#1DB954',
                               borderRadius: '4px'
@@ -2504,7 +2504,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                           ) : (
                             <span style={{
                               fontSize: '11px',
-                              padding: '2px 8px',
+                              padding: '2px 10px',
                               background: 'rgba(245, 158, 11, 0.2)',
                               color: '#f59e0b',
                               borderRadius: '4px'
