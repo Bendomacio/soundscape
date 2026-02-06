@@ -7,11 +7,14 @@ const isDev = import.meta.env.DEV;
 
 export const logger = {
   /**
-   * Log error messages. Only outputs in development mode.
+   * Log error messages. Always outputs, even in production.
+   * Errors should never be silently swallowed.
    */
   error: (message: string, error?: unknown): void => {
-    if (isDev) {
+    if (error !== undefined) {
       console.error(message, error);
+    } else {
+      console.error(message);
     }
   },
 

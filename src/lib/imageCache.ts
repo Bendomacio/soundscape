@@ -5,7 +5,9 @@
  */
 
 const CACHE_NAME = 'soundscape-images-v1';
-const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// Track blob URLs to revoke old ones and prevent memory leaks
+const blobUrlMap = new Map<string, string>();
 
 /**
  * Get a cached image URL or fetch and cache it
@@ -28,22 +30,36 @@ export async function getCachedImageUrl(originalUrl: string): Promise<string> {
     const cachedResponse = await cache.match(originalUrl);
     
     if (cachedResponse) {
+      // Revoke previous blob URL for this source if it exists
+      const existingBlobUrl = blobUrlMap.get(originalUrl);
+      if (existingBlobUrl) {
+        URL.revokeObjectURL(existingBlobUrl);
+      }
       // Return cached blob URL
       const blob = await cachedResponse.blob();
-      return URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlMap.set(originalUrl, blobUrl);
+      return blobUrl;
     }
 
     // Fetch and cache the image
     const response = await fetch(originalUrl, { mode: 'cors' });
-    
+
     if (response.ok) {
       // Clone response before caching (response can only be read once)
       const responseToCache = response.clone();
       await cache.put(originalUrl, responseToCache);
-      
+
+      // Revoke previous blob URL for this source if it exists
+      const existingBlobUrl = blobUrlMap.get(originalUrl);
+      if (existingBlobUrl) {
+        URL.revokeObjectURL(existingBlobUrl);
+      }
       // Return blob URL
       const blob = await response.blob();
-      return URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
+      blobUrlMap.set(originalUrl, blobUrl);
+      return blobUrl;
     }
     
     return originalUrl;
@@ -61,23 +77,29 @@ export async function preloadImages(urls: string[]): Promise<void> {
   if (!('caches' in window)) return;
 
   const cache = await caches.open(CACHE_NAME);
-  
-  for (const url of urls) {
-    if (!url || url.startsWith('data:')) continue;
-    
-    try {
-      // Check if already cached
-      const cached = await cache.match(url);
-      if (cached) continue;
+  const BATCH_SIZE = 5;
 
-      // Fetch and cache
-      const response = await fetch(url, { mode: 'cors' });
-      if (response.ok) {
-        await cache.put(url, response);
+  // Filter valid URLs first
+  const validUrls = urls.filter(url => url && !url.startsWith('data:'));
+
+  // Process in batches of 5
+  for (let i = 0; i < validUrls.length; i += BATCH_SIZE) {
+    const batch = validUrls.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(async (url) => {
+      try {
+        // Check if already cached
+        const cached = await cache.match(url);
+        if (cached) return;
+
+        // Fetch and cache
+        const response = await fetch(url, { mode: 'cors' });
+        if (response.ok) {
+          await cache.put(url, response);
+        }
+      } catch {
+        // Silently fail for individual images
       }
-    } catch (error) {
-      // Silently fail for individual images
-    }
+    }));
   }
 }
 

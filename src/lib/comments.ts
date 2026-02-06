@@ -45,12 +45,20 @@ export async function getComments(songId: string): Promise<SongComment[]> {
 }
 
 export async function addComment(songId: string, userId: string, content: string): Promise<SongComment | null> {
+  const trimmed = content.trim();
+
+  // Validate max length
+  if (trimmed.length > 2000) {
+    logger.error('Comment exceeds max length of 2000 characters');
+    return null;
+  }
+
   const { data, error } = await supabase
     .from('song_comments')
     .insert({
       song_id: songId,
       user_id: userId,
-      content: content.trim()
+      content: trimmed
     })
     .select('id, song_id, user_id, content, created_at')
     .single();
@@ -134,11 +142,24 @@ export async function getPhotos(songId: string, includeUnapproved = false): Prom
 }
 
 export async function uploadPhoto(
-  songId: string, 
-  userId: string, 
-  file: File, 
+  songId: string,
+  userId: string,
+  file: File,
   caption?: string
 ): Promise<SongPhoto | null> {
+  // Validate file type (only allow images)
+  if (!file.type.startsWith('image/')) {
+    logger.error('Invalid file type: only image files are allowed');
+    return null;
+  }
+
+  // Validate file size (max 10MB)
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  if (file.size > MAX_FILE_SIZE) {
+    logger.error('File too large: maximum size is 10MB');
+    return null;
+  }
+
   // Generate unique filename
   const fileExt = file.name.split('.').pop();
   const fileName = `${songId}/${userId}-${Date.now()}.${fileExt}`;
@@ -173,6 +194,8 @@ export async function uploadPhoto(
 
   if (error) {
     logger.error('Error creating photo record:', error);
+    // Clean up: delete the uploaded file from storage since DB insert failed
+    await supabase.storage.from('song-photos').remove([fileName]);
     return null;
   }
 
@@ -189,6 +212,19 @@ export async function uploadPhoto(
 }
 
 export async function deletePhoto(photoId: string): Promise<boolean> {
+  // First, fetch the photo record to get the storage path
+  const { data: photo, error: fetchError } = await supabase
+    .from('song_photos')
+    .select('photo_url')
+    .eq('id', photoId)
+    .single();
+
+  if (fetchError) {
+    logger.error('Error fetching photo for deletion:', fetchError);
+    return false;
+  }
+
+  // Delete the database record
   const { error } = await supabase
     .from('song_photos')
     .delete()
@@ -198,6 +234,25 @@ export async function deletePhoto(photoId: string): Promise<boolean> {
     logger.error('Error deleting photo:', error);
     return false;
   }
+
+  // Delete the file from Supabase Storage
+  // Extract the storage path from the public URL (path after the bucket name)
+  if (photo?.photo_url) {
+    try {
+      const url = new URL(photo.photo_url);
+      // Public URL format: .../storage/v1/object/public/song-photos/path/to/file
+      const bucketPrefix = '/storage/v1/object/public/song-photos/';
+      const pathIndex = url.pathname.indexOf(bucketPrefix);
+      if (pathIndex !== -1) {
+        const storagePath = url.pathname.slice(pathIndex + bucketPrefix.length);
+        await supabase.storage.from('song-photos').remove([storagePath]);
+      }
+    } catch (e) {
+      logger.error('Error deleting photo from storage:', e);
+      // DB record is already deleted, so we still return true
+    }
+  }
+
   return true;
 }
 

@@ -97,7 +97,7 @@ export function SpotifySearch({ isOpen, onClose, onSelect, initialQuery = '' }: 
   if (!isOpen) return null;
 
   return (
-    <div className="modal" style={{ zIndex: 10000 }}>
+    <div className="modal" role="dialog" aria-modal="true" style={{ zIndex: 10000 }}>
       <div className="modal-backdrop" onClick={onClose} />
       
       <div className="modal-content" style={{ maxWidth: '560px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>

@@ -377,8 +377,14 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
   // Count songs with any provider link
   const linkedCount = songs.filter(s => s.spotifyUri || s.providerLinks?.youtube || s.providerLinks?.appleMusic || s.providerLinks?.soundcloud).length;
 
+  // Pre-compute non-live songs for the review tab badge
+  const nonLiveSongs = allSongs.filter(s => s.status !== 'live');
+
   return (
-    <div style={{
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
       position: 'fixed',
       top: 0,
       left: 0,
@@ -436,6 +442,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           </div>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
               padding: '10px',
               background: 'none',
@@ -494,7 +501,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           >
             <Eye size={16} />
             Review
-            {allSongs.filter(s => s.status !== 'live').length > 0 && (
+            {nonLiveSongs.length > 0 && (
               <span style={{
                 background: '#f59e0b',
                 color: 'var(--color-dark)',
@@ -504,7 +511,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                 borderRadius: '10px',
                 marginLeft: '4px'
               }}>
-                {allSongs.filter(s => s.status !== 'live').length}
+                {nonLiveSongs.length}
               </span>
             )}
           </button>

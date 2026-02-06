@@ -148,6 +148,14 @@ export function DiscoveryPanel({
     setShowTripResults(false);
     setTripSearchResults([]);
   };
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (tripDebounceRef.current) clearTimeout(tripDebounceRef.current);
+    };
+  }, []);
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -229,6 +237,9 @@ export function DiscoveryPanel({
     >
       {/* Header - Always visible */}
       <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsExpanded(!isExpanded); } }}
         style={{
           padding: '16px',
           cursor: 'pointer',

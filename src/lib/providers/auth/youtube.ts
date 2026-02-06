@@ -3,6 +3,7 @@
 // Premium benefit: YouTube Premium/Music subscribers get ad-free playback
 
 import { logger } from '../../logger';
+import { generateRandomString, sha256, base64urlencode } from '../../crypto';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_CLIENT_SECRET || '';
@@ -33,25 +34,8 @@ export interface YouTubeUserProfile {
   isPremium: boolean; // YouTube Premium/Music subscriber
 }
 
-// PKCE helpers
-function generateRandomString(length: number): string {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const values = crypto.getRandomValues(new Uint8Array(length));
-  return values.reduce((acc, x) => acc + possible[x % possible.length], '');
-}
-
-async function sha256(plain: string): Promise<ArrayBuffer> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plain);
-  return window.crypto.subtle.digest('SHA-256', data);
-}
-
-function base64urlencode(input: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(input)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-}
+// Storage key for OAuth CSRF state parameter
+const OAUTH_STATE_KEY = 'youtube_oauth_state';
 
 /**
  * Initiate YouTube/Google OAuth login with PKCE
@@ -68,9 +52,13 @@ export async function initiateYouTubeLogin(): Promise<void> {
   const hashed = await sha256(codeVerifier);
   const codeChallenge = base64urlencode(hashed);
 
-  // Store verifier for callback
+  // Generate CSRF state parameter
+  const state = generateRandomString(32);
+
+  // Store verifier and state for callback
   sessionStorage.setItem(CODE_VERIFIER_KEY, codeVerifier);
-  console.log('YouTube OAuth: stored code verifier, length:', codeVerifier.length);
+  sessionStorage.setItem(OAUTH_STATE_KEY, state);
+  logger.debug('YouTube OAuth: stored code verifier, length:', codeVerifier.length);
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -80,7 +68,8 @@ export async function initiateYouTubeLogin(): Promise<void> {
     code_challenge_method: 'S256',
     code_challenge: codeChallenge,
     access_type: 'offline',
-    prompt: 'consent'
+    prompt: 'consent',
+    state
   });
 
   window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -91,10 +80,21 @@ export async function initiateYouTubeLogin(): Promise<void> {
  */
 export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAuth | null> {
   const codeVerifier = sessionStorage.getItem(CODE_VERIFIER_KEY);
-  console.log('YouTube callback: code verifier from storage:', codeVerifier ? `found (${codeVerifier.length} chars)` : 'NOT FOUND');
+  logger.debug('YouTube callback: code verifier from storage:', codeVerifier ? `found (${codeVerifier.length} chars)` : 'NOT FOUND');
 
   if (!codeVerifier) {
-    console.error('No code verifier found for YouTube OAuth');
+    logger.error('No code verifier found for YouTube OAuth');
+    return null;
+  }
+
+  // Verify CSRF state parameter
+  const savedState = sessionStorage.getItem(OAUTH_STATE_KEY);
+  const urlParams = new URLSearchParams(window.location.search);
+  const returnedState = urlParams.get('state');
+
+  if (savedState && returnedState !== savedState) {
+    logger.error('YouTube OAuth state mismatch - possible CSRF attack');
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
     return null;
   }
 
@@ -116,14 +116,14 @@ export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAu
 
     if (!response.ok) {
       const error = await response.json();
-      console.error('YouTube token exchange failed:', JSON.stringify(error, null, 2));
-      console.error('Request details:', JSON.stringify({
+      logger.error('YouTube token exchange failed:', error);
+      logger.debug('Request details:', {
         client_id: GOOGLE_CLIENT_ID,
         client_secret_length: GOOGLE_CLIENT_SECRET?.length,
         redirect_uri: REDIRECT_URI,
         hasCodeVerifier: !!codeVerifier,
         codeLength: code?.length
-      }, null, 2));
+      });
       return null;
     }
 
@@ -141,6 +141,7 @@ export async function handleYouTubeCallback(code: string): Promise<YouTubeUserAu
     }
     localStorage.setItem(TOKEN_EXPIRY_KEY, auth.expiresAt.toString());
     sessionStorage.removeItem(CODE_VERIFIER_KEY);
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
 
     // Fetch and cache profile
     await getYouTubeUserProfile();
@@ -246,6 +247,7 @@ export function clearYouTubeAuth(): void {
   localStorage.removeItem(TOKEN_EXPIRY_KEY);
   localStorage.removeItem(USER_PROFILE_KEY);
   sessionStorage.removeItem(CODE_VERIFIER_KEY);
+  sessionStorage.removeItem(OAUTH_STATE_KEY);
   sessionStorage.removeItem('youtube_connect_pending');
 }
 

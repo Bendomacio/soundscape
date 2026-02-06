@@ -29,6 +29,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getComments, addComment, deleteComment, getPhotos, uploadPhoto } from '../lib/comments';
 import { likeSong, unlikeSong, hasUserLikedSong, getSongLikeCount } from '../lib/songs';
 import { LoadingSpinner, UserAvatar, EmptyState } from './ui';
+import { getDistanceKm, formatDistance } from '../lib/geo';
 
 interface SongDetailPanelProps {
   song: SongLocation;
@@ -82,30 +83,10 @@ function useDominantColor(imageUrl: string): string {
       }
     };
     img.src = imageUrl;
+    return () => { img.onload = null; };
   }, [imageUrl]);
 
   return color;
-}
-
-// Calculate distance between two coordinates in km
-function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// Format distance for display
-function formatDistance(km: number): string {
-  if (km < 1) {
-    return `${Math.round(km * 1000)}m`;
-  }
-  return `${km.toFixed(1)}km`;
 }
 
 export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], onSongSelect }: SongDetailPanelProps) {
@@ -335,7 +316,10 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
   const isDesktop = !isMobile();
 
   return (
-    <div style={{
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
       position: 'fixed',
       top: 0,
       left: 0,
@@ -356,8 +340,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0, 0, 0, 0.9)',
-          backdropFilter: 'blur(12px)'
+          background: 'rgba(0, 0, 0, 0.9)'
         }}
       />
 
@@ -619,6 +602,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             <button
               onClick={handleLike}
               className="btn-glass"
+              aria-label={liked ? 'Unlike song' : 'Like song'}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -638,6 +622,7 @@ export function SongDetailPanel({ song, onClose, userLocation, allSongs = [], on
             <button
               onClick={handleShare}
               className="btn-glass"
+              aria-label="Share song"
               style={{
                 display: 'flex',
                 alignItems: 'center',

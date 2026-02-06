@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import type { User, Session, Provider } from '@supabase/supabase-js';
 import { logger } from '../lib/logger';
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // Refresh profile data
-  async function refreshProfile() {
+  const refreshProfile = useCallback(async () => {
     if (user) {
       const profileData = await fetchProfile(user.id);
       if (profileData) {
@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsAdmin(profileData.is_admin);
       }
     }
-  }
+  }, [user]);
 
   // Initialize auth state
   useEffect(() => {
@@ -198,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Sign in with email/password
-  async function signInWithEmail(email: string, password: string): Promise<{ error: Error | null }> {
+  const signInWithEmail = useCallback(async (email: string, password: string): Promise<{ error: Error | null }> => {
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -213,10 +213,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       return { error: err as Error };
     }
-  }
+  }, []);
 
   // Sign up with email/password
-  async function signUpWithEmail(email: string, password: string): Promise<{ error: Error | null }> {
+  const signUpWithEmail = useCallback(async (email: string, password: string): Promise<{ error: Error | null }> => {
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -234,10 +234,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       return { error: err as Error };
     }
-  }
+  }, []);
 
   // Sign in with OAuth provider (Google, Discord, Facebook)
-  async function signInWithProvider(provider: Provider): Promise<{ error: Error | null }> {
+  const signInWithProvider = useCallback(async (provider: Provider): Promise<{ error: Error | null }> => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
@@ -254,22 +254,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       return { error: err as Error };
     }
-  }
+  }, []);
 
   // Sign out
-  async function signOut(): Promise<void> {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    setSession(null);
-    setIsAdmin(false);
-    setIsDevSession(false);
-  }
+  const signOut = useCallback(async (): Promise<void> => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      logger.error('Error during sign out:', err);
+    } finally {
+      setUser(null);
+      setProfile(null);
+      setSession(null);
+      setIsAdmin(false);
+      setIsDevSession(false);
+    }
+  }, []);
 
   // Dev-only login for local testing (bypasses Supabase auth)
   const isDevMode = import.meta.env.DEV && window.location.hostname === 'localhost';
 
-  function devLogin(type: 'admin' | 'user'): void {
+  const devLogin = useCallback((type: 'admin' | 'user'): void => {
     if (!isDevMode) {
       logger.warn('Dev login attempted in production - ignored');
       return;
@@ -319,24 +324,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null); // No real session in dev mode
     setIsDevSession(true); // Flag that this is a dev session (no DB persistence)
     logger.debug(`Dev login as ${type}: ${mock.profile.display_name}`);
-  }
+  }, [isDevMode]);
+
+  const value = useMemo(() => ({
+    user,
+    profile,
+    session,
+    isAdmin,
+    isLoading,
+    isDevMode,
+    isDevSession,
+    signInWithEmail,
+    signUpWithEmail,
+    signInWithProvider,
+    signOut,
+    refreshProfile,
+    devLogin,
+  }), [user, profile, session, isAdmin, isLoading, isDevMode, isDevSession, signInWithEmail, signUpWithEmail, signInWithProvider, signOut, refreshProfile, devLogin]);
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      profile,
-      session,
-      isAdmin,
-      isLoading,
-      isDevMode,
-      isDevSession,
-      signInWithEmail,
-      signUpWithEmail,
-      signInWithProvider,
-      signOut,
-      refreshProfile,
-      devLogin,
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

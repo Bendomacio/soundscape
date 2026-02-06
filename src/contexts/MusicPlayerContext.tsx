@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { SongLocation, MusicProvider } from '../types';
 import type {
   SpotifyWebPlayer,
@@ -18,7 +18,6 @@ import {
 import { logger } from '../lib/logger';
 import { getBestProvider, getAdapter, providers } from '../lib/providers';
 import { getPreferenceFromCookie, setPreferenceCookie } from '../lib/preferences';
-import { useAuth } from './AuthContext';
 // Provider auth imports
 import {
   type ProviderConnection,
@@ -99,8 +98,6 @@ export function useMusicPlayer() {
 export const useSpotifyPlayer = useMusicPlayer;
 
 export function MusicPlayerProvider({ children }: { children: React.ReactNode }) {
-  useAuth(); // Used to sync preferences with logged-in user (future feature)
-
   const [state, setState] = useState<MusicPlayerState>({
     currentSong: null,
     isPlaying: false,
@@ -340,6 +337,11 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     };
 
     document.body.appendChild(script);
+
+    return () => {
+      // Disconnect the Web Playback SDK player on unmount
+      playerRef.current?.disconnect();
+    };
   }, []);
 
   // Position tracking interval
@@ -401,7 +403,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     }
   }, []);
 
-  const playWithSpotifyEmbed = useCallback((song: SongLocation, trackId: string) => {
+  const playWithSpotifyEmbed = useCallback((song: SongLocation, trackId: string, retryCount = 0) => {
     const uri = `spotify:track:${trackId}`;
 
     // Reuse existing controller if available
@@ -424,7 +426,12 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
 
     const container = containerRef.current;
     if (!container) {
-      setTimeout(() => playWithSpotifyEmbed(song, trackId), 100);
+      if (retryCount < 20) {
+        setTimeout(() => playWithSpotifyEmbed(song, trackId, retryCount + 1), 100);
+      } else {
+        logger.error('Spotify embed container not ready after 20 retries');
+        setState(prev => ({ ...prev, isLoading: false, error: 'Player container not available' }));
+      }
       return;
     }
 
@@ -488,10 +495,15 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     );
   }, []);
 
-  const playWithGenericEmbed = useCallback((song: SongLocation, provider: MusicProvider, id: string) => {
+  const playWithGenericEmbed = useCallback((song: SongLocation, provider: MusicProvider, id: string, retryCount = 0) => {
     const container = containerRef.current;
     if (!container) {
-      setTimeout(() => playWithGenericEmbed(song, provider, id), 100);
+      if (retryCount < 20) {
+        setTimeout(() => playWithGenericEmbed(song, provider, id, retryCount + 1), 100);
+      } else {
+        logger.error('Generic embed container not ready after 20 retries');
+        setState(prev => ({ ...prev, isLoading: false, error: 'Player container not available' }));
+      }
       return;
     }
 
@@ -695,7 +707,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         case 'youtube':
           await initiateYouTubeLogin();
           break;
-        case 'apple_music':
+        case 'apple_music': {
           const appleSuccess = await initiateAppleMusicLogin();
           if (appleSuccess) {
             const profile = getCachedAppleMusicProfile();
@@ -721,6 +733,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
             }));
           }
           break;
+        }
         case 'soundcloud':
           initiateSoundCloudLogin();
           // SoundCloud uses a confirmation flow, so we just mark as pending
@@ -813,25 +826,27 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     (state.currentProvider && state.currentProvider !== 'spotify')
   );
 
+  const value = useMemo(() => ({
+    ...state,
+    connection,
+    providerConnections,
+    play,
+    pause,
+    resume,
+    togglePlayPause,
+    seek,
+    stop,
+    connectSpotify,
+    disconnectSpotify,
+    connectProvider,
+    disconnectProvider,
+    confirmSoundCloud,
+    setSoundCloudPremiumStatus,
+    setProviderPreference
+  }), [state, connection, providerConnections, play, pause, resume, togglePlayPause, seek, stop, connectSpotify, disconnectSpotify, connectProvider, disconnectProvider, confirmSoundCloud, setSoundCloudPremiumStatus, setProviderPreference]);
+
   return (
-    <MusicPlayerContext.Provider value={{
-      ...state,
-      connection,
-      providerConnections,
-      play,
-      pause,
-      resume,
-      togglePlayPause,
-      seek,
-      stop,
-      connectSpotify,
-      disconnectSpotify,
-      connectProvider,
-      disconnectProvider,
-      confirmSoundCloud,
-      setSoundCloudPremiumStatus,
-      setProviderPreference
-    }}>
+    <MusicPlayerContext.Provider value={value}>
       {children}
       {/* Embed container (shown when using embed players) */}
       <div

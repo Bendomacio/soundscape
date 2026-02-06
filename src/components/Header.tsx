@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Check, Unlink, Sparkles, Link2, ExternalLink, Crown, AlertCircle } from 'lucide-react';
+import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Check, Unlink, Sparkles, Link2, ExternalLink, Crown, AlertCircle, HelpCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMusicPlayer } from '../contexts/MusicPlayerContext';
 import { LoadingSpinner, UserAvatar } from './ui';
@@ -51,9 +51,10 @@ interface HeaderProps {
   onLoginClick: () => void;
   onAdminClick: () => void;
   onMySubmissionsClick: () => void;
+  onHelpClick: () => void;
 }
 
-export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissionsClick }: HeaderProps) {
+export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissionsClick, onHelpClick }: HeaderProps) {
   const { user, profile, isAdmin, signOut, isDevMode, isDevSession, devLogin } = useAuth();
   const {
     connection,
@@ -76,19 +77,23 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
 
   // Check for pending SoundCloud confirmation
   useEffect(() => {
-    const checkPending = () => {
-      if (isSoundCloudConnectionPending()) {
+    // Check once on mount
+    if (isSoundCloudConnectionPending()) {
+      setShowSoundCloudConfirm(true);
+    }
+    // Re-check when user returns to this tab (after visiting SoundCloud in another tab)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isSoundCloudConnectionPending()) {
         setShowSoundCloudConfirm(true);
       }
     };
-    checkPending();
-    // Check periodically in case user returns from SoundCloud
-    const interval = setInterval(checkPending, 1000);
-    return () => clearInterval(interval);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Close menu when clicking outside
+  // Close menu when clicking outside - only attach when a menu is open
   useEffect(() => {
+    if (!showUserMenu && !showDevMenu) return;
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowUserMenu(false);
@@ -99,7 +104,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [showUserMenu, showDevMenu]);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-30 pointer-events-none">
@@ -169,6 +174,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                 transition: 'all 0.2s ease'
               }}
               title="Admin Panel"
+              aria-label="Admin Panel"
             >
               <Shield size={16} />
               <span className="hidden sm:inline">Admin</span>
@@ -196,6 +202,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
               transition: 'all 0.2s ease'
             }}
             title="Submit Song"
+            aria-label="Submit Song"
           >
             <Plus size={18} strokeWidth={2.5} />
             <span className="hidden sm:inline">Submit Song</span>
@@ -293,6 +300,7 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
             <button
               onClick={() => user ? setShowUserMenu(!showUserMenu) : onLoginClick()}
               className="glass-light"
+              aria-label={user ? 'User profile menu' : 'Sign in'}
               style={{
                 width: '44px',
                 height: '44px',
@@ -764,6 +772,18 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                   >
                     <FolderOpen size={18} style={{ opacity: 0.7 }} />
                     <span>My Submissions</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onHelpClick();
+                    }}
+                    className="dropdown-item"
+                    style={{ borderRadius: '10px' }}
+                  >
+                    <HelpCircle size={18} style={{ opacity: 0.7 }} />
+                    <span>What is SoundScape?</span>
                   </button>
 
                   {isAdmin && (

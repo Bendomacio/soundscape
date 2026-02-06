@@ -91,7 +91,10 @@ export function MySubmissions({ isOpen, onClose, onEditSong }: MySubmissionsProp
   };
 
   return (
-    <div style={{
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
       position: 'fixed',
       top: 0,
       left: 0,

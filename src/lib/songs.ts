@@ -1,33 +1,9 @@
 import { supabase } from './supabase';
-import type { SongLocation, SongStatus, ProviderLinks } from '../types';
+import type { SongLocation, SongStatus } from '../types';
 import type { DbSongRow, DbSongRowUpdate } from '../types/database';
 import { londonSongs } from '../data/londonSongs';
 import { logger } from './logger';
-
-// Build providerLinks from database columns
-function buildProviderLinks(row: DbSongRow): ProviderLinks | undefined {
-  const links: ProviderLinks = {};
-  let hasAny = false;
-
-  if (row.spotify_uri) {
-    links.spotify = row.spotify_uri.replace('spotify:track:', '');
-    hasAny = true;
-  }
-  if (row.youtube_id) {
-    links.youtube = row.youtube_id;
-    hasAny = true;
-  }
-  if (row.apple_music_id) {
-    links.appleMusic = row.apple_music_id;
-    hasAny = true;
-  }
-  if (row.soundcloud_url) {
-    links.soundcloud = row.soundcloud_url;
-    hasAny = true;
-  }
-
-  return hasAny ? links : undefined;
-}
+import { dbToProviderLinks } from './providers/index';
 
 // Convert database row to SongLocation type
 function dbToSong(row: DbSongRow): SongLocation {
@@ -51,7 +27,7 @@ function dbToSong(row: DbSongRow): SongLocation {
     submittedAt: row.created_at ? new Date(row.created_at) : undefined,
     status: row.status || 'live',
     adminNotes: row.admin_notes ?? undefined,
-    providerLinks: buildProviderLinks(row)
+    providerLinks: dbToProviderLinks(row)
   };
 }
 

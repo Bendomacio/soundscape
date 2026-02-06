@@ -1,5 +1,9 @@
 // Spotify Web API integration with OAuth and Web Playback SDK
 
+import { generateRandomString, sha256, base64urlencode } from './crypto';
+import { parseSonglinkEntities } from './songlink';
+import { logger } from './logger';
+
 const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_CLIENT_SECRET = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET || '';
 const REDIRECT_URI = typeof window !== 'undefined' ? `${window.location.origin}/callback` : '';
@@ -64,31 +68,15 @@ export interface SpotifyUserAuth {
 // PKCE OAuth Flow (no client secret exposed in browser)
 // =====================================================
 
-function generateRandomString(length: number): string {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const values = crypto.getRandomValues(new Uint8Array(length));
-  return values.reduce((acc, x) => acc + possible[x % possible.length], '');
-}
-
-async function sha256(plain: string): Promise<ArrayBuffer> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plain);
-  return window.crypto.subtle.digest('SHA-256', data);
-}
-
-function base64urlencode(input: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(input)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-}
+// Storage key for OAuth CSRF state parameter
+const OAUTH_STATE_KEY = 'spotify_oauth_state';
 
 /**
  * Initiate Spotify OAuth login with PKCE
  */
 export async function initiateSpotifyLogin(): Promise<void> {
   if (!SPOTIFY_CLIENT_ID) {
-    console.error('Spotify Client ID not configured');
+    logger.error('Spotify Client ID not configured');
     return;
   }
 
@@ -96,8 +84,12 @@ export async function initiateSpotifyLogin(): Promise<void> {
   const hashed = await sha256(codeVerifier);
   const codeChallenge = base64urlencode(hashed);
 
-  // Store verifier for callback
+  // Generate CSRF state parameter
+  const state = generateRandomString(32);
+
+  // Store verifier and state for callback
   sessionStorage.setItem(CODE_VERIFIER_KEY, codeVerifier);
+  sessionStorage.setItem(OAUTH_STATE_KEY, state);
 
   const params = new URLSearchParams({
     client_id: SPOTIFY_CLIENT_ID,
@@ -105,7 +97,8 @@ export async function initiateSpotifyLogin(): Promise<void> {
     redirect_uri: REDIRECT_URI,
     scope: SCOPES,
     code_challenge_method: 'S256',
-    code_challenge: codeChallenge
+    code_challenge: codeChallenge,
+    state
   });
 
   window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
@@ -116,9 +109,20 @@ export async function initiateSpotifyLogin(): Promise<void> {
  */
 export async function handleSpotifyCallback(code: string): Promise<SpotifyUserAuth | null> {
   const codeVerifier = sessionStorage.getItem(CODE_VERIFIER_KEY);
-  
+
   if (!codeVerifier) {
-    console.error('No code verifier found');
+    logger.error('No code verifier found');
+    return null;
+  }
+
+  // Verify CSRF state parameter
+  const savedState = sessionStorage.getItem(OAUTH_STATE_KEY);
+  const urlParams = new URLSearchParams(window.location.search);
+  const returnedState = urlParams.get('state');
+
+  if (savedState && returnedState !== savedState) {
+    logger.error('OAuth state mismatch - possible CSRF attack');
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
     return null;
   }
 
@@ -139,7 +143,7 @@ export async function handleSpotifyCallback(code: string): Promise<SpotifyUserAu
 
     if (!response.ok) {
       const error = await response.json();
-      console.error('Token exchange failed:', error);
+      logger.error('Token exchange failed:', error);
       return null;
     }
 
@@ -155,10 +159,11 @@ export async function handleSpotifyCallback(code: string): Promise<SpotifyUserAu
     localStorage.setItem(REFRESH_TOKEN_KEY, auth.refreshToken);
     localStorage.setItem(TOKEN_EXPIRY_KEY, auth.expiresAt.toString());
     sessionStorage.removeItem(CODE_VERIFIER_KEY);
+    sessionStorage.removeItem(OAUTH_STATE_KEY);
 
     return auth;
   } catch (error) {
-    console.error('Failed to exchange code for tokens:', error);
+    logger.error('Failed to exchange code for tokens:', error);
     return null;
   }
 }
@@ -207,7 +212,7 @@ export async function refreshUserToken(): Promise<SpotifyUserAuth | null> {
 
     return auth;
   } catch (error) {
-    console.error('Failed to refresh token:', error);
+    logger.error('Failed to refresh token:', error);
     return null;
   }
 }
@@ -253,6 +258,7 @@ export function clearSpotifyAuth(): void {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(TOKEN_EXPIRY_KEY);
   sessionStorage.removeItem(CODE_VERIFIER_KEY);
+  sessionStorage.removeItem(OAUTH_STATE_KEY);
 }
 
 /**
@@ -283,7 +289,7 @@ export async function getSpotifyUserProfile(): Promise<{ display_name: string; i
  */
 export async function getTrackInfo(
   trackId: string,
-  _retries: number = 2
+  retries: number = 2
 ): Promise<{ title: string; artist: string; albumArt: string } | null> {
   try {
     const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
@@ -294,74 +300,44 @@ export async function getTrackInfo(
 
     // Handle rate limiting with retry
     if (response.status === 429) {
-      console.log('Rate limited by song.link, waiting 5s...');
+      if (retries <= 0) {
+        logger.error('song.link rate limit retries exhausted');
+        return null;
+      }
+      logger.debug('Rate limited by song.link, waiting 5s...');
       await new Promise(resolve => setTimeout(resolve, 5000));
-      return getTrackInfo(trackId, 0);
+      return getTrackInfo(trackId, retries - 1);
     }
 
     if (!response.ok) {
-      console.error('song.link fetch failed:', response.status);
+      logger.error('song.link fetch failed:', response.status);
       return null;
     }
 
     const data = await response.json();
 
-    // Get metadata from entities
+    // Get metadata from entities using shared parser
     const entities = data.entitiesByUniqueId || {};
-    let title = '';
-    let artist = '';
-    let albumArt = '';
+    const parsed = parseSonglinkEntities(entities);
+    if (!parsed) return null;
 
-    // Try iTunes/Apple Music first (best metadata)
-    for (const [entityId, entity] of Object.entries(entities)) {
-      if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
-        const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
-        title = e.title || '';
-        artist = e.artistName || '';
-        albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || '';
-        break;
-      }
-    }
-
-    // Fallback to Spotify entity
-    if (!title) {
-      for (const [entityId, entity] of Object.entries(entities)) {
-        if (entityId.startsWith('SPOTIFY_SONG::')) {
-          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
-          title = e.title || '';
-          artist = e.artistName || '';
-          albumArt = e.thumbnailUrl || '';
-          break;
-        }
-      }
-    }
-
-    if (!title) {
-      return null;
-    }
-
-    // Clean up title (remove remaster suffixes)
-    title = title
-      .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
-      .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
-      .replace(/\s*-\s*Remaster(ed)?/gi, '')
-      .replace(/\s*\(Remaster(ed)?\)/gi, '')
-      .trim();
-
-    return { title, artist, albumArt };
+    return { title: parsed.title, artist: parsed.artist, albumArt: parsed.albumArt };
   } catch (error) {
-    console.error('Failed to fetch track info:', error);
+    logger.error('Failed to fetch track info:', error);
     return null;
   }
 }
 
+// WARNING: This function uses SPOTIFY_CLIENT_SECRET which is exposed in the client bundle
+// via VITE_SPOTIFY_CLIENT_SECRET. This should be moved to a server-side endpoint.
+// Keeping it here for now because it powers the search functionality.
 async function getAccessToken(): Promise<string> {
   if (accessToken && Date.now() < tokenExpiry) {
     return accessToken;
   }
 
   if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
-    console.warn('Spotify credentials not configured. Using mock search.');
+    logger.warn('Spotify credentials not configured. Using mock search.');
     return 'demo-token';
   }
 
@@ -404,7 +380,7 @@ export async function searchTracks(query: string, limit: number = 10): Promise<S
   );
 
   if (!response.ok) {
-    console.error('Spotify search failed:', response.status);
+    logger.error('Spotify search failed:', response.status);
     return getMockResults(query);
   }
 

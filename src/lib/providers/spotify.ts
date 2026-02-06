@@ -1,4 +1,5 @@
 import type { MusicProviderAdapter, ProviderTrackInfo, EmbedConfig } from './types';
+import { parseSonglinkEntities } from '../songlink';
 
 /**
  * Spotify provider adapter
@@ -43,7 +44,7 @@ export const spotifyAdapter: MusicProviderAdapter = {
     return null;
   },
 
-  async getTrackInfo(id: string): Promise<ProviderTrackInfo | null> {
+  async getTrackInfo(id: string, retries: number = 3): Promise<ProviderTrackInfo | null> {
     try {
       // Use song.link API via proxy to avoid CORS issues
       const spotifyUrl = `https://open.spotify.com/track/${id}`;
@@ -52,9 +53,13 @@ export const spotifyAdapter: MusicProviderAdapter = {
       const response = await fetch(`/api/songlink?url=${encoded}`);
 
       if (response.status === 429) {
-        // Rate limited - wait and retry once
+        if (retries <= 0) {
+          console.error('Spotify getTrackInfo: rate limit retries exhausted');
+          return null;
+        }
+        // Rate limited - wait and retry
         await new Promise(resolve => setTimeout(resolve, 5000));
-        return this.getTrackInfo(id);
+        return this.getTrackInfo(id, retries - 1);
       }
 
       if (!response.ok) {
@@ -64,45 +69,11 @@ export const spotifyAdapter: MusicProviderAdapter = {
       const data = await response.json();
       const entities = data.entitiesByUniqueId || {};
 
-      let title = '';
-      let artist = '';
-      let albumArt = '';
+      // Use shared entity parser
+      const parsed = parseSonglinkEntities(entities);
+      if (!parsed) return null;
 
-      // Try iTunes/Apple Music first
-      for (const [entityId, entity] of Object.entries(entities)) {
-        if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
-          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
-          title = e.title || '';
-          artist = e.artistName || '';
-          albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || '';
-          break;
-        }
-      }
-
-      // Fallback to Spotify entity
-      if (!title) {
-        for (const [entityId, entity] of Object.entries(entities)) {
-          if (entityId.startsWith('SPOTIFY_SONG::')) {
-            const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
-            title = e.title || '';
-            artist = e.artistName || '';
-            albumArt = e.thumbnailUrl || '';
-            break;
-          }
-        }
-      }
-
-      if (!title) return null;
-
-      // Clean up title (remove remaster suffixes)
-      title = title
-        .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
-        .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
-        .replace(/\s*-\s*Remaster(ed)?/gi, '')
-        .replace(/\s*\(Remaster(ed)?\)/gi, '')
-        .trim();
-
-      return { title, artist, albumArt };
+      return { title: parsed.title, artist: parsed.artist, albumArt: parsed.albumArt };
     } catch (error) {
       console.error('Spotify getTrackInfo error:', error);
       return null;

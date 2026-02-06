@@ -43,7 +43,7 @@ export interface MusicProviderAdapter {
   extractId(input: string): string | null;
 
   /** Fetch track information using oEmbed or API */
-  getTrackInfo(id: string): Promise<ProviderTrackInfo | null>;
+  getTrackInfo(id: string, retries?: number): Promise<ProviderTrackInfo | null>;
 
   /** Get embed configuration for player */
   getEmbedConfig(id: string): EmbedConfig;

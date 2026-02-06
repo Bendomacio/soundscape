@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import Map, { Marker, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
 import type { MapRef } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -57,17 +57,19 @@ function createCircleGeoJSON(
 }
 
 // Album art marker component with image caching
-function AlbumMarker({
-  song,
-  isPlaying,
-  isSelected,
-  onClick
-}: {
+interface AlbumMarkerProps {
   song: SongLocation;
   isPlaying: boolean;
   isSelected: boolean;
   onClick: () => void;
-}) {
+}
+
+const AlbumMarker = React.memo(function AlbumMarker({
+  song,
+  isPlaying,
+  isSelected,
+  onClick
+}: AlbumMarkerProps) {
   const [imgError, setImgError] = useState(false);
   const { src: cachedSrc, isLoading: imgLoading } = useCachedImage(song.albumArt);
   const size = isPlaying ? 64 : isSelected ? 56 : 48;
@@ -93,6 +95,9 @@ function AlbumMarker({
   return (
     <div
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
       style={{
         width: size,
         height: size,
@@ -157,7 +162,7 @@ function AlbumMarker({
       </div>
     </div>
   );
-}
+});
 
 export function MusicMap({
   songs,
@@ -357,6 +362,9 @@ export function MusicMap({
           >
             <div
               onClick={() => onSongSelect(song)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSongSelect(song) }}
               style={{
                 width: 32,
                 height: 32,
@@ -400,16 +408,6 @@ export function MusicMap({
         })}
       </Map>
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
-          50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.1; }
-        }
-        /* Offset map controls above the music player bar */
-        .mapboxgl-ctrl-bottom-right {
-          bottom: 100px !important;
-        }
-      `}</style>
     </div>
   );
 }

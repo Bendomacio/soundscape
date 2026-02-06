@@ -43,6 +43,13 @@ export function LocationPicker({ latitude, longitude, onChange }: LocationPicker
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   // Debounced search
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);

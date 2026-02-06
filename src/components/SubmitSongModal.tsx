@@ -65,6 +65,13 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const handleProviderUrlFetch = async (url: string) => {
     setSearchError(null);
     setSearchSuccess(false);
@@ -240,7 +247,7 @@ export function SubmitSongModal({ onClose, onSubmit, userLocation }: SubmitSongM
   };
 
   return (
-    <div className="modal">
+    <div className="modal" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div className="modal-backdrop" onClick={onClose} />
 

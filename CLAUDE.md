@@ -135,14 +135,31 @@ interface SongLocation {
 
 - Songs without `spotifyUri` cannot be played
 - Album art URLs containing `i.scdn.co` are cached Spotify images; others trigger re-fetch
-- Rate limiting on song.link API: requests are batched with 1.5-second delays
+- Rate limiting on song.link API: requests are batched with 1.5-second delays, retry functions have bounded `retries` parameter (max 3) to prevent infinite recursion
 - Row Level Security enforces that users can only edit their own songs; admins can edit/insert all
+- Both context providers (`AuthContext`, `MusicPlayerContext`) memoize their Provider values and wrap handlers in `useCallback` to prevent unnecessary re-renders
+- OAuth flows (Spotify, YouTube) use CSRF `state` parameter stored in `sessionStorage` for verification
+- All modals use `role="dialog"` and `aria-modal="true"` for accessibility
+- `ErrorBoundary` wraps `MusicMap` and `MusicPlayer` in `App.tsx` for crash resilience
 
 ### RLS Policies on `songs` table
 - SELECT: Anyone can read live songs, users can read their own, admins can read all
 - INSERT: Users can insert with matching `user_id`, **admins can insert any song**
 - UPDATE: Users can update own songs, admins can update all
 - DELETE: Users can delete own songs, admins can delete all
+
+### Shared Utility Modules
+
+- **`lib/crypto.ts`**: PKCE OAuth helpers (`generateRandomString`, `sha256`, `base64urlencode`) — shared by Spotify and YouTube auth
+- **`lib/songlink.ts`**: song.link entity parsing (`parseSonglinkEntities`, `cleanRemasterSuffix`) — shared by spotify.ts, spotifyLookup.ts, providers/spotify.ts
+- **`lib/geo.ts`**: Geographic calculations (`getDistanceKm`, `pointToSegmentDistance`, `getMinDistanceToRoute`, `formatDistance`) — shared by App.tsx and SongDetailPanel.tsx
+- **`components/ErrorBoundary.tsx`**: React error boundary with retry button, wraps crash-prone components
+
+### Input Validation (`lib/comments.ts`)
+
+- Comment text: max 2000 characters
+- Photo upload: `image/*` MIME type check, 10MB size limit
+- Storage cleanup on failed DB insert; file deletion on photo removal
 
 ## Recent Features (Feb 2026)
 
@@ -194,5 +211,5 @@ interface SongLocation {
 ## Git Workflow Notes
 
 - GPG signing fails locally, use: `git -c commit.gpgsign=false commit`
-- Always include `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>` in commits
+- Always include `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>` in commits
 - Dev server runs on port 5173 (not 5174 as previously documented)

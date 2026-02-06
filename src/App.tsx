@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Music2 } from 'lucide-react';
 import './utils/uiTests'; // Auto-runs UI tests in dev mode
 import { MusicMap } from './components/MusicMap';
@@ -10,6 +10,8 @@ import { Header } from './components/Header';
 import { AuthModal } from './components/AuthModal';
 import { AdminPanel } from './components/AdminPanel';
 import { MySubmissions } from './components/MySubmissions';
+import { WelcomeModal } from './components/WelcomeModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SpotifyPlayerProvider, useSpotifyPlayer } from './contexts/SpotifyPlayerContext';
 import { fetchSongs, updateSong, addSong, deleteSong } from './lib/songs';
@@ -18,6 +20,7 @@ import { handleYouTubeCallback } from './lib/providers/auth';
 
 // Force Vercel rebuild - provider linking feature
 import { preloadImages, clearOldCache } from './lib/imageCache';
+import { getDistanceKm, getMinDistanceToRoute } from './lib/geo';
 import type { SongLocation, MapViewState, ProviderLinks } from './types';
 import { hasPlayableLink } from './types';
 
@@ -35,15 +38,12 @@ function OAuthCallbackHandler() {
 
     // Determine which provider callback this is
     let provider: 'spotify' | 'youtube' | null = null;
-    let providerColor = '#1DB954';
 
     if (pathname === '/callback/youtube') {
       provider = 'youtube';
-      providerColor = '#FF0000';
       setProviderName('YouTube');
     } else if (pathname === '/callback' || (code && !pathname.includes('/callback/'))) {
       provider = 'spotify';
-      providerColor = '#1DB954';
       setProviderName('Spotify');
     }
 
@@ -158,6 +158,7 @@ function AppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showMySubmissions, setShowMySubmissions] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [radius, setRadius] = useState(5);
   const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore' | 'trip'>('nearby');
 
@@ -187,39 +188,43 @@ function AppContent() {
 
   // Load songs from database on mount and fetch real Spotify album art (with caching & rate limiting)
   useEffect(() => {
+    let aborted = false;
+
     async function loadSongs() {
       setIsLoading(true);
       const data = await fetchSongs();
+      if (aborted) return;
       setSongs(data);
       setIsLoading(false);
-      
+
       // Only fetch album art for songs that don't have real Spotify art cached
       // Real Spotify art URLs contain "i.scdn.co" or "spotifycdn.com"
       const songsNeedingArt = data.filter(s =>
         s.spotifyUri &&
         (!s.albumArt || (!s.albumArt.includes('i.scdn.co') && !s.albumArt.includes('spotifycdn.com')))
       );
-      
+
       if (songsNeedingArt.length === 0) {
         console.log('All songs have cached album art');
         return;
       }
-      
+
       console.log(`Fetching album art for ${songsNeedingArt.length} songs (rate limited)...`);
-      
+
       // Process one at a time with delays to avoid rate limiting (429 errors)
       const BATCH_SIZE = 1;  // Process one song at a time
       const DELAY_MS = 2000; // 2 seconds between requests
-      
+
       for (let i = 0; i < songsNeedingArt.length; i += BATCH_SIZE) {
+        if (aborted) return;
         const batch = songsNeedingArt.slice(i, i + BATCH_SIZE);
-        
+
         // Process batch in parallel
         const results = await Promise.all(
           batch.map(async (song) => {
             const trackId = song.spotifyUri?.replace('spotify:track:', '');
             if (!trackId) return null;
-            
+
             try {
               const trackInfo = await getTrackInfo(trackId);
               if (trackInfo?.albumArt) {
@@ -231,34 +236,38 @@ function AppContent() {
             return null;
           })
         );
-        
+
         // Update local state and persist to database
         for (const result of results) {
-          if (result) {
-            setSongs(prev => prev.map(s => 
+          if (result && !aborted) {
+            setSongs(prev => prev.map(s =>
               s.id === result.songId ? { ...s, albumArt: result.albumArt } : s
             ));
             // Cache in database so we don't need to fetch again
             updateSong(result.songId, { albumArt: result.albumArt });
           }
         }
-        
+
         // Wait before next batch (if not last batch)
         if (i + BATCH_SIZE < songsNeedingArt.length) {
           await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
       }
-      
+
       console.log('Album art fetch complete');
     }
-    
+
     // Clear old caches and preload images
     async function initCache() {
       await clearOldCache();
     }
-    
+
     loadSongs();
     initCache();
+
+    return () => {
+      aborted = true;
+    };
   }, []);
 
   // Refresh songs (for admin panel)
@@ -306,15 +315,22 @@ function AppContent() {
     }
   }, []);
 
+  // Show welcome modal on first visit
+  useEffect(() => {
+    if (!localStorage.getItem('hasSeenWelcome')) {
+      setShowWelcomeModal(true);
+    }
+  }, []);
+
   // Calculate songs in radius based on discovery mode
-  const songsInRadius = songs.filter(song => {
+  const songsInRadius = useMemo(() => songs.filter(song => {
     // If radius is 0, show all songs (no filtering)
     if (radius === 0) return true;
-    
+
     // Determine center point based on mode
     let centerLat: number;
     let centerLng: number;
-    
+
     if (discoveryMode === 'nearby') {
       if (!userLocation) return true;
       centerLat = userLocation.latitude;
@@ -330,83 +346,10 @@ function AppContent() {
         centerLng = viewState.longitude;
       }
     }
-    
+
     const distance = getDistanceKm(centerLat, centerLng, song.latitude, song.longitude);
     return distance <= radius;
-  });
-
-  function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-  // Calculate perpendicular distance from a point to a line segment
-  function pointToSegmentDistance(
-    pointLat: number,
-    pointLng: number,
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number
-  ): number {
-    const A = pointLat - lat1;
-    const B = pointLng - lng1;
-    const C = lat2 - lat1;
-    const D = lng2 - lng1;
-
-    const dot = A * C + B * D;
-    const lenSq = C * C + D * D;
-
-    let param = -1;
-    if (lenSq !== 0) {
-      param = dot / lenSq;
-    }
-
-    let nearestLat: number;
-    let nearestLng: number;
-
-    if (param < 0) {
-      nearestLat = lat1;
-      nearestLng = lng1;
-    } else if (param > 1) {
-      nearestLat = lat2;
-      nearestLng = lng2;
-    } else {
-      nearestLat = lat1 + param * C;
-      nearestLng = lng1 + param * D;
-    }
-
-    return getDistanceKm(pointLat, pointLng, nearestLat, nearestLng);
-  }
-
-  // Calculate minimum distance from a point to a route (polyline)
-  function getMinDistanceToRoute(
-    pointLat: number,
-    pointLng: number,
-    route: [number, number][]
-  ): number {
-    let minDistance = Infinity;
-
-    // Check distance to each segment of the route
-    for (let i = 0; i < route.length - 1; i++) {
-      const [lng1, lat1] = route[i];
-      const [lng2, lat2] = route[i + 1];
-
-      const dist = pointToSegmentDistance(pointLat, pointLng, lat1, lng1, lat2, lng2);
-      if (dist < minDistance) {
-        minDistance = dist;
-      }
-    }
-
-    return minDistance;
-  }
+  }), [songs, radius, discoveryMode, userLocation, exploreCenter, viewState.latitude, viewState.longitude]);
 
   // Handle trip destination selection
   const handleTripDestinationSet = useCallback(async (destination: { lat: number; lng: number; name: string }) => {
@@ -519,40 +462,81 @@ function AppContent() {
       submittedAt: new Date(),
       providerLinks: data.providerLinks
     };
-    
+
     // Update local state immediately
     setSongs(prev => [...prev, newSong]);
     setShowSubmitModal(false);
-    
+
     // Persist to database
-    await addSong(newSong);
+    try {
+      await addSong(newSong);
+    } catch (err) {
+      console.error('Failed to add song:', err);
+      // Revert optimistic update
+      setSongs(prev => prev.filter(s => s.id !== newSong.id));
+    }
   }, [user, profile]);
 
   // Admin handlers
   const handleUpdateSong = useCallback(async (songId: string, updates: Partial<SongLocation>) => {
+    // Capture previous state for rollback
+    const previousSongs = songs;
+    const previousCurrentSong = currentSong;
+
     // Update local state immediately
-    setSongs(prev => prev.map(song => 
+    setSongs(prev => prev.map(song =>
       song.id === songId ? { ...song, ...updates } : song
     ));
-    
+
     // Also update currentSong if it's the one being updated
     setCurrentSong(prev => prev?.id === songId ? { ...prev, ...updates } : prev);
-    
+
     // Persist to database
-    await updateSong(songId, updates);
-  }, []);
+    try {
+      await updateSong(songId, updates);
+    } catch (err) {
+      console.error('Failed to update song:', err);
+      // Revert optimistic update
+      setSongs(previousSongs);
+      setCurrentSong(previousCurrentSong);
+    }
+  }, [songs, currentSong]);
 
   const handleDeleteSong = useCallback(async (songId: string) => {
+    // Capture previous state for rollback
+    const previousSongs = songs;
+    const previousCurrentSong = currentSong;
+    const previousSelectedSong = selectedSong;
+
     // Update local state immediately
     setSongs(prev => prev.filter(song => song.id !== songId));
     if (currentSong?.id === songId) {
       setCurrentSong(null);
       setSelectedSong(null);
     }
-    
+
     // Persist to database
-    await deleteSong(songId);
-  }, [currentSong]);
+    try {
+      await deleteSong(songId);
+    } catch (err) {
+      console.error('Failed to delete song:', err);
+      // Revert optimistic update
+      setSongs(previousSongs);
+      setCurrentSong(previousCurrentSong);
+      setSelectedSong(previousSelectedSong);
+    }
+  }, [songs, currentSong, selectedSong]);
+
+  // Compute discovery center for the map
+  const discoveryCenter = useMemo(() => {
+    if (discoveryMode === 'nearby') {
+      return userLocation;
+    }
+    if (discoveryMode === 'trip') {
+      return tripDestination ? { latitude: tripDestination.lat, longitude: tripDestination.lng } : null;
+    }
+    return exploreCenter || { latitude: viewState.latitude, longitude: viewState.longitude };
+  }, [discoveryMode, userLocation, tripDestination, exploreCenter, viewState.latitude, viewState.longitude]);
 
   // Loading state
   if (isLoading) {
@@ -612,36 +596,33 @@ function AppContent() {
   return (
     <div className="h-full w-full relative overflow-hidden bg-[#0D1117]">
       {/* Header */}
-      <Header 
-        onSubmitClick={() => user ? setShowSubmitModal(true) : setShowAuthModal(true)} 
+      <Header
+        onSubmitClick={() => user ? setShowSubmitModal(true) : setShowAuthModal(true)}
         onLoginClick={() => setShowAuthModal(true)}
         onAdminClick={() => setShowAdminPanel(true)}
         onMySubmissionsClick={() => user ? setShowMySubmissions(true) : setShowAuthModal(true)}
+        onHelpClick={() => setShowWelcomeModal(true)}
       />
 
       {/* Map */}
-      <MusicMap
-        songs={discoveryMode === 'trip' ? tripSongsOnRoute : songsInRadius}
-        allSongs={songs}
-        currentSong={currentSong}
-        selectedSong={selectedSong}
-        onSongSelect={handleSongSelect}
-        userLocation={userLocation}
-        radius={discoveryMode === 'trip' ? 0 : radius}
-        viewState={viewState}
-        onViewStateChange={setViewState}
-        discoveryMode={discoveryMode}
-        discoveryCenter={
-          discoveryMode === 'nearby'
-            ? userLocation
-            : discoveryMode === 'trip'
-              ? tripDestination ? { latitude: tripDestination.lat, longitude: tripDestination.lng } : null
-              : exploreCenter || { latitude: viewState.latitude, longitude: viewState.longitude }
-        }
-        tripRoute={tripRoute}
-        tripDestination={tripDestination}
-        isAdmin={profile?.is_admin || false}
-      />
+      <ErrorBoundary>
+        <MusicMap
+          songs={discoveryMode === 'trip' ? tripSongsOnRoute : songsInRadius}
+          allSongs={songs}
+          currentSong={currentSong}
+          selectedSong={selectedSong}
+          onSongSelect={handleSongSelect}
+          userLocation={userLocation}
+          radius={discoveryMode === 'trip' ? 0 : radius}
+          viewState={viewState}
+          onViewStateChange={setViewState}
+          discoveryMode={discoveryMode}
+          discoveryCenter={discoveryCenter}
+          tripRoute={tripRoute}
+          tripDestination={tripDestination}
+          isAdmin={profile?.is_admin || false}
+        />
+      </ErrorBoundary>
 
       {/* Discovery Panel */}
       <DiscoveryPanel
@@ -691,11 +672,13 @@ function AppContent() {
       />
 
       {/* Music Player */}
-      <MusicPlayer
-        currentSong={currentSong}
-        onSongClick={() => currentSong && setShowDetailPanel(true)}
-        onShuffle={handleShuffle}
-      />
+      <ErrorBoundary>
+        <MusicPlayer
+          currentSong={currentSong}
+          onSongClick={() => currentSong && setShowDetailPanel(true)}
+          onShuffle={handleShuffle}
+        />
+      </ErrorBoundary>
 
       {/* Song Detail Panel */}
       {showDetailPanel && currentSong && (
@@ -740,6 +723,15 @@ function AppContent() {
       <MySubmissions
         isOpen={showMySubmissions}
         onClose={() => setShowMySubmissions(false)}
+      />
+
+      {/* Welcome Modal */}
+      <WelcomeModal
+        isOpen={showWelcomeModal}
+        onClose={() => {
+          localStorage.setItem('hasSeenWelcome', 'true');
+          setShowWelcomeModal(false);
+        }}
       />
     </div>
   );

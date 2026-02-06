@@ -9,6 +9,8 @@
  * Also provides reverse lookup: get metadata from Spotify URI via song.link
  */
 
+import { parseSonglinkEntities } from './songlink';
+
 interface ITunesResult {
   trackId: number;
   trackName: string;
@@ -392,50 +394,20 @@ export async function verifySpotifyMetadata(
 
     const data = await response.json();
 
-    // song.link returns entitiesByUniqueId with metadata
-    // Try to get data from iTunes/Apple Music entity (has best metadata)
-    let title = '';
-    let artist = '';
-    let album: string | null = null;
-    let albumArt: string | null = null;
-
-    // Look for iTunes entity first (best metadata)
+    // Parse entities using shared parser
     const entities = data.entitiesByUniqueId || {};
-    for (const [entityId, entity] of Object.entries(entities)) {
-      if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
-        const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string; albumName?: string };
-        title = e.title || title;
-        artist = e.artistName || artist;
-        albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || albumArt;
-        album = e.albumName || album;
-        break;
-      }
-    }
+    const parsed = parseSonglinkEntities(entities);
 
-    // Fallback to Spotify entity if no iTunes
-    if (!title || !artist) {
-      for (const [entityId, entity] of Object.entries(entities)) {
-        if (entityId.startsWith('SPOTIFY_SONG::')) {
-          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string; albumName?: string };
-          title = e.title || title;
-          artist = e.artistName || artist;
-          albumArt = e.thumbnailUrl || albumArt;
-          album = e.albumName || album;
-          break;
-        }
-      }
-    }
-
-    if (!title || !artist) {
+    if (!parsed || !parsed.title || !parsed.artist) {
       return null;
     }
 
     return {
       spotifyUri,
-      title,
-      artist,
-      album,
-      albumArt
+      title: parsed.title,
+      artist: parsed.artist,
+      album: parsed.album || null,
+      albumArt: parsed.albumArt || null
     };
   } catch (error) {
     if (error instanceof Error && error.message === 'RATE_LIMITED') {
@@ -455,6 +427,8 @@ export async function batchVerifyMetadata(
   delayMs: number = 1500
 ): Promise<Map<string, { current: { title: string; artist: string; album?: string }; spotify: MetadataVerifyResult; hasMismatch: boolean }>> {
   const results = new Map<string, { current: { title: string; artist: string; album?: string }; spotify: MetadataVerifyResult; hasMismatch: boolean }>();
+  const MAX_RETRIES_PER_SONG = 3;
+  const retryCounters = new Map<number, number>();
 
   for (let i = 0; i < songs.length; i++) {
     const song = songs[i];
@@ -480,12 +454,18 @@ export async function batchVerifyMetadata(
       }
     } catch (error) {
       if (error instanceof Error && error.message === 'RATE_LIMITED') {
-        // Wait longer on rate limit
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        i--; // Retry this song
-        continue;
+        const currentRetries = retryCounters.get(i) || 0;
+        if (currentRetries < MAX_RETRIES_PER_SONG) {
+          retryCounters.set(i, currentRetries + 1);
+          // Wait longer on rate limit
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          i--; // Retry this song
+          continue;
+        }
+        console.error(`Rate limit retries exhausted for ${song.title}`);
+      } else {
+        console.error(`Failed to verify ${song.title}:`, error);
       }
-      console.error(`Failed to verify ${song.title}:`, error);
     }
 
     // Rate limit delay
@@ -502,7 +482,8 @@ export async function batchVerifyMetadata(
  * CORS-friendly alternative to Spotify oEmbed
  */
 export async function getSpotifyTrackInfo(
-  trackId: string
+  trackId: string,
+  retries: number = 3
 ): Promise<{ title: string; artist: string; albumArt: string | null } | null> {
   try {
     const spotifyUrl = `https://open.spotify.com/track/${trackId}`;
@@ -513,9 +494,13 @@ export async function getSpotifyTrackInfo(
 
     if (!response.ok) {
       if (response.status === 429) {
-        // Rate limited - wait and retry once
+        if (retries <= 0) {
+          console.warn('song.link rate limit retries exhausted for track:', trackId);
+          return null;
+        }
+        // Rate limited - wait and retry
         await new Promise(resolve => setTimeout(resolve, 5000));
-        return getSpotifyTrackInfo(trackId);
+        return getSpotifyTrackInfo(trackId, retries - 1);
       }
       console.warn('song.link lookup failed:', response.status);
       return null;
@@ -523,49 +508,12 @@ export async function getSpotifyTrackInfo(
 
     const data = await response.json();
 
-    // Get metadata from entities
+    // Parse entities using shared parser
     const entities = data.entitiesByUniqueId || {};
-    let title = '';
-    let artist = '';
-    let albumArt: string | null = null;
+    const parsed = parseSonglinkEntities(entities);
+    if (!parsed) return null;
 
-    // Try iTunes/Apple Music first (best metadata)
-    for (const [entityId, entity] of Object.entries(entities)) {
-      if (entityId.startsWith('ITUNES_SONG::') || entityId.startsWith('APPLE_MUSIC::')) {
-        const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
-        title = e.title || '';
-        artist = e.artistName || '';
-        albumArt = e.thumbnailUrl?.replace('100x100', '600x600') || null;
-        break;
-      }
-    }
-
-    // Fallback to Spotify entity
-    if (!title) {
-      for (const [entityId, entity] of Object.entries(entities)) {
-        if (entityId.startsWith('SPOTIFY_SONG::')) {
-          const e = entity as { title?: string; artistName?: string; thumbnailUrl?: string };
-          title = e.title || '';
-          artist = e.artistName || '';
-          albumArt = e.thumbnailUrl || null;
-          break;
-        }
-      }
-    }
-
-    if (!title) {
-      return null;
-    }
-
-    // Clean up title (remove remaster suffixes)
-    title = title
-      .replace(/\s*-\s*\d{4}\s*Remaster(ed)?/gi, '')
-      .replace(/\s*\(\d{4}\s*Remaster(ed)?\)/gi, '')
-      .replace(/\s*-\s*Remaster(ed)?/gi, '')
-      .replace(/\s*\(Remaster(ed)?\)/gi, '')
-      .trim();
-
-    return { title, artist, albumArt };
+    return { title: parsed.title, artist: parsed.artist, albumArt: parsed.albumArt || null };
   } catch (error) {
     console.error('getSpotifyTrackInfo error:', error);
     return null;

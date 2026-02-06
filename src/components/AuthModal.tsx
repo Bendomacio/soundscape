@@ -106,7 +106,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   }
 
   return (
-    <div className="modal">
+    <div className="modal" role="dialog" aria-modal="true">
       {/* Backdrop */}
       <div className="modal-backdrop" onClick={onClose} />
 
