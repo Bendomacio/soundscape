@@ -34,7 +34,11 @@ When viewing a song, see sidebar panels showing other songs within 5km and more 
 - **Likes** - Upvote your favourite song spots
 
 ### 🛡️ Admin Panel
-Full admin dashboard to manage songs, review submissions, approve photos, and maintain quality.
+Full admin dashboard to manage songs, review submissions, approve photos, and maintain quality:
+- **CSV Import/Export** - Bulk import songs with automatic Spotify metadata lookup via iTunes + song.link
+- **Metadata Verification** - Batch check Spotify URIs against song.link and fix mismatches
+- **Geo Audit** - Scan all songs with Google Maps Geocoding to detect incorrect coordinates, review flagged mismatches, and bulk-fix with suggested corrections
+- **Photo Moderation** - Approve or reject user-submitted location photos
 
 ## 🛠️ Tech Stack
 
@@ -43,9 +47,10 @@ Full admin dashboard to manage songs, review submissions, approve photos, and ma
 | **Frontend** | React 19 + TypeScript |
 | **Build** | Vite 5 |
 | **Maps** | Mapbox GL JS via react-map-gl |
-| **Music** | Spotify Web API + Web Playback SDK |
+| **Music** | Spotify Web API + Web Playback SDK + YouTube, Apple Music, SoundCloud |
 | **Database** | Supabase (PostgreSQL) with Row Level Security |
 | **Auth** | Supabase Auth (Email + Google, Discord, Facebook OAuth) |
+| **Geocoding** | Google Maps Geocoding API |
 | **Storage** | Supabase Storage |
 | **Icons** | Lucide React |
 | **Deployment** | Vercel |
@@ -87,7 +92,9 @@ VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 VITE_MAPBOX_TOKEN=your_mapbox_public_token
 VITE_SPOTIFY_CLIENT_ID=your_spotify_client_id
-VITE_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret  # Optional
+VITE_SPOTIFY_CLIENT_SECRET=your_spotify_client_secret  # Optional: enables real Spotify search
+VITE_GOOGLE_CLIENT_ID=your_google_client_id            # Optional: YouTube account linking
+VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key      # Optional: Geo Audit coordinate validation
 ```
 
 ### Database Setup
@@ -107,18 +114,26 @@ See [`AUTH_SETUP_GUIDE.md`](./AUTH_SETUP_GUIDE.md) for OAuth configuration.
 src/
 ├── components/          # React components
 │   ├── MusicMap.tsx         # Main map with song markers
-│   ├── MusicPlayer.tsx      # Spotify player controls
+│   ├── MusicPlayer.tsx      # Multi-provider player controls
 │   ├── SongDetailPanel.tsx  # Song info modal with tabs
 │   ├── DiscoveryPanel.tsx   # Nearby/Explore/Trip modes
 │   ├── SubmitSongModal.tsx  # Song submission wizard
-│   └── AdminPanel.tsx       # Admin management UI
+│   ├── AdminPanel.tsx       # Admin management UI (songs, import/export, photos)
+│   ├── AdminGeoAudit.tsx    # Geo Audit tab (coordinate validation & correction)
+│   └── ErrorBoundary.tsx    # Crash resilience wrapper
 ├── contexts/            # React contexts
 │   ├── AuthContext.tsx      # Authentication state
-│   └── SpotifyPlayerContext.tsx
+│   └── MusicPlayerContext.tsx  # Multi-provider playback (Spotify, YouTube, Apple, SoundCloud)
 ├── lib/                 # API & utilities
 │   ├── songs.ts             # Song CRUD operations
 │   ├── spotify.ts           # Spotify API helpers
-│   └── supabase.ts          # Supabase client
+│   ├── geocode.ts           # Google Maps Geocoding (geo audit)
+│   ├── spotifyLookup.ts     # iTunes + song.link batch metadata lookup
+│   ├── geo.ts               # Geographic calculations (distance, route)
+│   ├── crypto.ts            # PKCE OAuth helpers
+│   ├── songlink.ts          # song.link entity parsing
+│   ├── supabase.ts          # Supabase client
+│   └── providers/           # Multi-provider auth & playback modules
 ├── types/               # TypeScript definitions
 └── scripts/             # Database scripts
 ```
@@ -126,6 +141,17 @@ src/
 ## 📜 Changelog
 
 ### February 2026
+
+#### 2026-02-07
+- **Geo Audit** - Admin tab to scan all songs against Google Maps Geocoding API, detect misplaced markers, and bulk-fix coordinates with suggested corrections
+- **CSV Import Geo Validation** - Imported songs are now geo-validated before import, with mismatch warnings and accept/reject in the review step
+- **Multi-Provider Playback** - Spotify SDK playback is now non-blocking; falls back to embed on SDK failure
+- **Error Visibility** - Geocoding errors surface as a distinct "Error" severity instead of being silently marked OK
+
+#### 2026-02-05
+- **Admin CSV Import/Export** - Bulk import songs with automatic Spotify URI, album art, and metadata lookup via iTunes + song.link
+- **Metadata Verification** - Batch check existing songs against song.link and one-click fix mismatched metadata
+- **Welcome Modal** - Onboarding flow with layered screenshots showcasing app features
 
 #### 2026-02-03
 - **Songs Nearby & Related Panels** - Sidebar panels showing songs within 5km and tracks by the same artist
@@ -169,7 +195,6 @@ src/
 ### Planned
 - [ ] Search & filters (by artist, title, genre)
 - [ ] Favourites/bookmarks
-- [ ] Share links for individual songs
 - [ ] PWA support (offline mode, install to home screen)
 - [ ] Multiple cities (expand beyond London)
 
@@ -179,6 +204,15 @@ src/
 - [ ] Heat map visualization of song density
 - [ ] User following and social features
 - [ ] Song stories (rich personal narratives)
+
+### Completed
+- [x] CSV Import/Export with metadata lookup
+- [x] Geo Audit coordinate validation
+- [x] Multi-provider playback (Spotify, YouTube, Apple Music, SoundCloud)
+- [x] Trip Mode (songs along your route)
+- [x] Songs Nearby & Related panels
+- [x] Native sharing (Web Share API)
+- [x] Welcome onboarding modal
 
 ## 🤝 Contributing
 
