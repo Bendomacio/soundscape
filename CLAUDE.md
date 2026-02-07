@@ -103,6 +103,9 @@ Optional (Provider OAuth - for premium playback):
 - `VITE_GOOGLE_CLIENT_ID` - Google OAuth for YouTube account linking (enables premium playback)
 - `VITE_APPLE_MUSIC_TOKEN` - Apple MusicKit developer token (enables Apple Music subscriber playback)
 
+Optional (Geo Audit):
+- `VITE_GOOGLE_MAPS_API_KEY` - Google Maps API key with Geocoding API enabled (for Admin Geo Audit)
+
 Note: SoundCloud doesn't have a public API, so it uses a self-reported connection flow.
 Note: Apple Music requires paid Apple Developer account ($99/year), so it's hidden in the UI.
 
@@ -207,6 +210,18 @@ interface SongLocation {
   - Batch check songs with Spotify URIs against song.link metadata
   - Identifies mismatches in title/artist/album
   - One-click fix to update corrupted metadata from Spotify source
+
+### Geolocation Audit (`AdminGeoAudit.tsx`, `lib/geocode.ts`)
+- **Geo Audit tab** in Admin Panel: geocode each song's `locationName` via Google Maps Geocoding API, compare against stored coordinates
+- Google Geocoding chosen over Mapbox for much better POI/landmark name resolution (e.g. "Abbey Road Studios")
+- Two-pass strategy: bounds-biased request first (handles ambiguous names), unbiased fallback only for flagged songs
+- Classification: OK (<50km), Suspicious (50-500km), Bad (>500km) — threshold configurable
+- `batchAuditGeo()` rate-limited at 200ms/req (~5 req/s, well under Google's 50/s limit)
+- Results cached in `localStorage` (24h TTL) under `soundscape_geo_audit_results`
+- Expandable candidate list per song, radio selection for preferred candidate
+- Bulk select + "Apply Fixes" updates coordinates in DB
+- **CSV Import integration**: after Spotify lookup, geo-validates imported entries and flags `geo_mismatch` issues with one-click "Accept" to use suggested coordinates
+- Requires `VITE_GOOGLE_MAPS_API_KEY` with Geocoding API enabled
 
 ## Git Workflow Notes
 

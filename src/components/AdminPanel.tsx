@@ -34,6 +34,8 @@ import { setSongStatus, fetchAllSongsAdmin, addSong } from '../lib/songs';
 import { detectProvider, extractProviderId } from '../lib/providers';
 import { batchLookupSpotifyUris, batchVerifyMetadata, type LookupProgress, type SpotifyLookupResult, type MetadataVerifyResult } from '../lib/spotifyLookup';
 import { updateSong } from '../lib/songs';
+import { AdminGeoAudit } from './AdminGeoAudit';
+import { batchAuditGeo, type GeoAuditResult } from '../lib/geocode';
 
 // Validation issue types
 type ValidationIssue =
@@ -45,7 +47,8 @@ type ValidationIssue =
   | 'suspicious_artist'
   | 'too_short'
   | 'spotify_not_found'
-  | 'low_confidence_match';
+  | 'low_confidence_match'
+  | 'geo_mismatch';
 
 const ISSUE_LABELS: Record<ValidationIssue, { label: string; severity: 'error' | 'warning' }> = {
   missing_title: { label: 'Missing title', severity: 'error' },
@@ -56,7 +59,8 @@ const ISSUE_LABELS: Record<ValidationIssue, { label: string; severity: 'error' |
   suspicious_artist: { label: 'Suspicious artist', severity: 'warning' },
   too_short: { label: 'Title/artist too short', severity: 'warning' },
   spotify_not_found: { label: 'Spotify lookup failed', severity: 'warning' },
-  low_confidence_match: { label: 'Low confidence match', severity: 'warning' }
+  low_confidence_match: { label: 'Low confidence match', severity: 'warning' },
+  geo_mismatch: { label: 'Geo mismatch', severity: 'warning' }
 };
 
 // Validate a song entry
@@ -106,6 +110,7 @@ interface ImportSongEntry extends Partial<SongLocation> {
   _duplicateOf?: string;
   _issues?: ValidationIssue[];
   _excluded?: boolean;
+  _geoResult?: GeoAuditResult;
 }
 
 // Provider display config
@@ -147,7 +152,7 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
   const [showSpotifySearch, setShowSpotifySearch] = useState(false);
   const [showProviderEditor, setShowProviderEditor] = useState(false);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'songs' | 'review' | 'photos' | 'import'>('songs');
+  const [activeTab, setActiveTab] = useState<'songs' | 'review' | 'photos' | 'import' | 'geo'>('songs');
   const [pendingPhotos, setPendingPhotos] = useState<SongPhoto[]>([]);
   const [loadingPhotos, setLoadingPhotos] = useState(false);
   const [processingPhoto, setProcessingPhoto] = useState<string | null>(null);
@@ -566,6 +571,25 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
           >
             <Upload size={16} />
             Import
+          </button>
+          <button
+            onClick={() => setActiveTab('geo')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 20px',
+              background: activeTab === 'geo' ? 'var(--color-dark-lighter)' : 'transparent',
+              border: 'none',
+              borderRadius: '8px',
+              color: activeTab === 'geo' ? 'white' : 'var(--color-text-muted)',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
+          >
+            <MapPin size={16} />
+            Geo Audit
           </button>
         </div>
 
@@ -2088,6 +2112,45 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
 
                       setLookupResults(results);
                       setLookupProgress(null);
+
+                      // Geo-validate imported entries
+                      const toGeoCheck = importedSongs.filter(s =>
+                        !s._duplicate && !s._excluded && s.latitude && s.longitude && s.locationName
+                      );
+                      if (toGeoCheck.length > 0) {
+                        const geoResults = await batchAuditGeo(
+                          toGeoCheck.map(s => ({
+                            id: s._importId,
+                            title: s.title || '',
+                            artist: s.artist || '',
+                            latitude: s.latitude || 0,
+                            longitude: s.longitude || 0,
+                            locationName: s.locationName || '',
+                            locationDescription: s.locationDescription,
+                            upvotes: 0,
+                            verified: false,
+                          })),
+                          (p) => setLookupProgress({
+                            current: p.current,
+                            total: p.total,
+                            songTitle: p.songTitle,
+                            status: 'searching',
+                          })
+                        );
+
+                        // Flag songs with geo mismatches
+                        geoResults.forEach((geoResult, importId) => {
+                          if (geoResult.severity !== 'ok') {
+                            setImportedSongs(prev => prev.map(s =>
+                              s._importId === importId
+                                ? { ...s, _issues: [...(s._issues || []), 'geo_mismatch'], _geoResult: geoResult }
+                                : s
+                            ));
+                          }
+                        });
+                        setLookupProgress(null);
+                      }
+
                       setImportStep('review');
                     }}
                     style={{
@@ -2186,6 +2249,18 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Low Confidence</div>
                   </div>
+                  <div style={{
+                    padding: '12px 16px',
+                    background: 'var(--color-dark-card)',
+                    borderRadius: '8px',
+                    flex: 1,
+                    minWidth: '100px'
+                  }}>
+                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#f59e0b' }}>
+                      {importedSongs.filter(s => s._geoResult && s._geoResult.severity !== 'ok').length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Geo Mismatch</div>
+                  </div>
                 </div>
 
                 {/* Review list with lookup results */}
@@ -2265,7 +2340,66 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
                                 Not found
                               </span>
                             )}
+                            {song._geoResult && song._geoResult.severity !== 'ok' && (
+                              <span style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                padding: '2px 10px',
+                                background: song._geoResult.severity === 'bad'
+                                  ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                                color: song._geoResult.severity === 'bad' ? '#ef4444' : '#f59e0b',
+                                borderRadius: '4px',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                <MapPin size={12} />
+                                Geo {Math.round(song._geoResult.distanceKm)}km off
+                              </span>
+                            )}
                           </div>
+                          {/* Geo mismatch suggestion */}
+                          {song._geoResult && song._geoResult.severity !== 'ok' && (
+                            <div style={{
+                              fontSize: '11px',
+                              color: 'var(--color-text-muted)',
+                              marginTop: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              flexWrap: 'wrap',
+                              width: '100%',
+                              paddingLeft: '32px'
+                            }}>
+                              <span>Suggested: {song._geoResult.suggestedPlaceName}</span>
+                              <button
+                                onClick={() => {
+                                  setImportedSongs(prev => prev.map(s =>
+                                    s._importId === song._importId
+                                      ? {
+                                          ...s,
+                                          latitude: song._geoResult!.suggestedLat,
+                                          longitude: song._geoResult!.suggestedLng,
+                                          _issues: (s._issues || []).filter(i => i !== 'geo_mismatch'),
+                                          _geoResult: undefined
+                                        }
+                                      : s
+                                  ));
+                                }}
+                                style={{
+                                  padding: '2px 8px',
+                                  background: 'rgba(99, 102, 241, 0.2)',
+                                  color: 'var(--color-primary)',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Accept
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -2666,6 +2800,15 @@ export function AdminPanel({ isOpen, onClose, songs, onUpdateSong, onDeleteSong,
             )}
           </div>
         </div>
+        )}
+
+        {/* Geo Audit tab */}
+        {activeTab === 'geo' && (
+          <AdminGeoAudit
+            songs={songs}
+            onUpdateSong={onUpdateSong}
+            onRefreshSongs={onRefreshSongs}
+          />
         )}
 
         {/* Stats footer */}
