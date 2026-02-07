@@ -220,7 +220,8 @@ export function AdminGeoAudit({ songs, onUpdateSong, onRefreshSongs }: AdminGeoA
 
     setSelectedIds(new Set());
     setApplying(false);
-    onRefreshSongs?.();
+    // Don't call onRefreshSongs — optimistic updates already moved the markers
+    // and a re-fetch can overwrite them if there's any read-after-write delay.
   }, [selectedIds, results, candidateChoice, onUpdateSong, onRefreshSongs]);
 
   // ---- Render ----
