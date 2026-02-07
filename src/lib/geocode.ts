@@ -210,7 +210,16 @@ export async function auditSongGeo(
   };
 
   if (!GOOGLE_MAPS_KEY) {
-    return OK_RESULT(base, 'Google Maps API key not configured (VITE_GOOGLE_MAPS_API_KEY)');
+    return {
+      ...base,
+      severity: 'error' as GeoSeverity,
+      distanceKm: 0,
+      suggestedLat: base.currentLat,
+      suggestedLng: base.currentLng,
+      suggestedPlaceName: '',
+      candidates: [],
+      error: 'Google Maps API key not configured (VITE_GOOGLE_MAPS_API_KEY)',
+    };
   }
 
   try {

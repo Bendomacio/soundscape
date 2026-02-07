@@ -24,7 +24,7 @@ import { formatDistance } from '../lib/geo';
 // Cache helpers
 // ---------------------------------------------------------------------------
 
-const CACHE_KEY = 'soundscape_geo_audit_v2'; // v2: Google Maps + error visibility
+const CACHE_KEY = 'soundscape_geo_audit_v3'; // v3: missing API key now returns error severity
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface CachedAudit {
