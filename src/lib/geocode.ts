@@ -27,7 +27,7 @@ export interface GeoCandidate {
   types: string[];
 }
 
-export type GeoSeverity = 'ok' | 'suspicious' | 'bad';
+export type GeoSeverity = 'ok' | 'suspicious' | 'bad' | 'error';
 
 export interface GeoAuditResult {
   songId: string;
@@ -220,31 +220,31 @@ export async function auditSongGeo(
       lng: song.longitude,
     });
 
-    if (biasedCandidates.length === 0) {
-      return OK_RESULT(base, 'No geocoding results');
-    }
+    // If biased search found results, check if any are close
+    if (biasedCandidates.length > 0) {
+      const { idx: closestIdx, distanceKm: closestDist } = findClosest(
+        song.latitude,
+        song.longitude,
+        biasedCandidates
+      );
 
-    const { idx: closestIdx, distanceKm: closestDist } = findClosest(
-      song.latitude,
-      song.longitude,
-      biasedCandidates
-    );
-
-    // If the biased closest candidate is within threshold → OK
-    if (closestDist < config.suspiciousThresholdKm) {
-      const closest = biasedCandidates[closestIdx];
-      return {
-        ...base,
-        severity: 'ok',
-        distanceKm: closestDist,
-        suggestedLat: closest.latitude,
-        suggestedLng: closest.longitude,
-        suggestedPlaceName: closest.placeName,
-        candidates: biasedCandidates,
-      };
+      // If the biased closest candidate is within threshold → OK
+      if (closestDist < config.suspiciousThresholdKm) {
+        const closest = biasedCandidates[closestIdx];
+        return {
+          ...base,
+          severity: 'ok',
+          distanceKm: closestDist,
+          suggestedLat: closest.latitude,
+          suggestedLng: closest.longitude,
+          suggestedPlaceName: closest.placeName,
+          candidates: biasedCandidates,
+        };
+      }
     }
 
     // --- Pass 2: unbiased (global) ---
+    // Always runs when biased search returned zero results OR flagged a mismatch
     const globalCandidates = await geocode(query);
 
     // Merge both sets, deduplicating by coordinates
@@ -256,6 +256,11 @@ export async function auditSongGeo(
         seen.add(key);
         allCandidates.push(c);
       }
+    }
+
+    // No results from either pass
+    if (allCandidates.length === 0) {
+      return OK_RESULT(base, 'No geocoding results');
     }
 
     // Check if any combined candidate is close
@@ -297,7 +302,16 @@ export async function auditSongGeo(
       candidates: allCandidates,
     };
   } catch (err) {
-    return OK_RESULT(base, err instanceof Error ? err.message : 'Unknown error');
+    return {
+      ...base,
+      severity: 'error' as GeoSeverity,
+      distanceKm: 0,
+      suggestedLat: base.currentLat,
+      suggestedLng: base.currentLng,
+      suggestedPlaceName: '',
+      candidates: [],
+      error: err instanceof Error ? err.message : 'Unknown error',
+    };
   }
 }
 

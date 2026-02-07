@@ -24,7 +24,7 @@ import { formatDistance } from '../lib/geo';
 // Cache helpers
 // ---------------------------------------------------------------------------
 
-const CACHE_KEY = 'soundscape_geo_audit_results';
+const CACHE_KEY = 'soundscape_geo_audit_v2'; // v2: Google Maps + error visibility
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 interface CachedAudit {
@@ -67,18 +67,21 @@ const SEVERITY_COLORS: Record<GeoSeverity, string> = {
   ok: '#10b981',
   suspicious: '#f59e0b',
   bad: '#ef4444',
+  error: '#8b5cf6',
 };
 
 const SEVERITY_LABELS: Record<GeoSeverity, string> = {
   ok: 'OK',
   suspicious: 'Suspicious',
   bad: 'Bad',
+  error: 'Error',
 };
 
 const SEVERITY_ICONS: Record<GeoSeverity, typeof Check> = {
   ok: Check,
   suspicious: AlertTriangle,
   bad: XCircle,
+  error: AlertTriangle,
 };
 
 // ---------------------------------------------------------------------------
@@ -91,7 +94,7 @@ interface AdminGeoAuditProps {
   onRefreshSongs?: () => void;
 }
 
-type FilterMode = 'all' | 'suspicious' | 'bad';
+type FilterMode = 'all' | 'suspicious' | 'bad' | 'error';
 
 export function AdminGeoAudit({ songs, onUpdateSong, onRefreshSongs }: AdminGeoAuditProps) {
   const [results, setResults] = useState<Map<string, GeoAuditResult>>(new Map());
@@ -144,12 +147,14 @@ export function AdminGeoAudit({ songs, onUpdateSong, onRefreshSongs }: AdminGeoA
   const okCount = resultList.filter((r) => r.severity === 'ok').length;
   const suspiciousCount = resultList.filter((r) => r.severity === 'suspicious').length;
   const badCount = resultList.filter((r) => r.severity === 'bad').length;
-  const flaggedCount = suspiciousCount + badCount;
+  const errorCount = resultList.filter((r) => r.severity === 'error').length;
+  const flaggedCount = suspiciousCount + badCount + errorCount;
 
   const filteredResults = resultList.filter((r) => {
     if (filter === 'suspicious') return r.severity === 'suspicious';
     if (filter === 'bad') return r.severity === 'bad';
-    return r.severity !== 'ok'; // 'all' = show only flagged
+    if (filter === 'error') return r.severity === 'error';
+    return r.severity !== 'ok'; // 'all' = show only flagged (incl. errors)
   });
 
   // ---- Selection helpers ----
@@ -388,6 +393,18 @@ export function AdminGeoAudit({ songs, onUpdateSong, onRefreshSongs }: AdminGeoA
               <div style={{ fontSize: '24px', fontWeight: 700, color: '#ef4444' }}>{badCount}</div>
               <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Bad</div>
             </div>
+            {errorCount > 0 && (
+              <div style={{
+                padding: '12px 16px',
+                background: 'var(--color-dark-card)',
+                borderRadius: '8px',
+                flex: 1,
+                minWidth: '80px',
+              }}>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#8b5cf6' }}>{errorCount}</div>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Errors</div>
+              </div>
+            )}
           </div>
 
           {/* Filter + Bulk actions */}
@@ -400,7 +417,7 @@ export function AdminGeoAudit({ songs, onUpdateSong, onRefreshSongs }: AdminGeoA
               alignItems: 'center',
             }}>
               {/* Severity filter */}
-              {(['all', 'suspicious', 'bad'] as const).map((f) => (
+              {(['all', 'suspicious', 'bad', ...(errorCount > 0 ? ['error' as const] : [])] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
