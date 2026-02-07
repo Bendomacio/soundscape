@@ -592,11 +592,14 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     // For Spotify, try Web Playback SDK first if premium
     if (best.provider === 'spotify') {
       if (connection.isPremium && deviceIdRef.current) {
-        const success = await playWithSDK(song);
-        if (success) {
-          setState(prev => ({ ...prev, isPlaying: true, isLoading: false }));
-          return;
-        }
+        // Fire-and-forget: don't await the API call — player_state_changed will update state
+        playWithSDK(song).then(success => {
+          if (!success) {
+            // SDK failed, fall back to embed
+            playWithSpotifyEmbed(song, best.id);
+          }
+        });
+        return;
       }
       // Fall back to Spotify embed
       playWithSpotifyEmbed(song, best.id);
