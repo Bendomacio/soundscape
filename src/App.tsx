@@ -533,7 +533,12 @@ function AppContent() {
 
     // Persist to database
     try {
-      await updateSong(songId, updates);
+      const success = await updateSong(songId, updates);
+      if (!success) {
+        console.error('Failed to update song: DB write returned false');
+        setSongs(previousSongs);
+        setCurrentSong(previousCurrentSong);
+      }
     } catch (err) {
       console.error('Failed to update song:', err);
       // Revert optimistic update

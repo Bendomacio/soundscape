@@ -128,13 +128,21 @@ export async function updateSong(songId: string, updates: Partial<SongLocation>)
   }
 
   try {
-    const { error } = await supabase
+    const dbPayload = songToDb(updates);
+    const { data, error } = await supabase
       .from('songs')
-      .update(songToDb(updates))
-      .eq('id', songId);
+      .update(dbPayload)
+      .eq('id', songId)
+      .select('id');
 
     if (error) {
       logger.error('Error updating song:', error);
+      return false;
+    }
+
+    // PostgREST returns 200 with empty array when RLS silently blocks the update
+    if (!data || data.length === 0) {
+      logger.error('Update blocked by RLS — no rows modified. Session may have expired. songId:', songId);
       return false;
     }
 
