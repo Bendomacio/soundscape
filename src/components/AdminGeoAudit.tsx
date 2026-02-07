@@ -87,7 +87,7 @@ const SEVERITY_ICONS: Record<GeoSeverity, typeof Check> = {
 
 interface AdminGeoAuditProps {
   songs: SongLocation[];
-  onUpdateSong: (songId: string, updates: Partial<SongLocation>) => void;
+  onUpdateSong: (songId: string, updates: Partial<SongLocation>) => void | Promise<void>;
   onRefreshSongs?: () => void;
 }
 
@@ -181,13 +181,10 @@ export function AdminGeoAudit({ songs, onUpdateSong, onRefreshSongs }: AdminGeoA
       const candidate = result.candidates[choiceIdx];
       if (!candidate) continue;
 
-      onUpdateSong(id, {
+      await onUpdateSong(id, {
         latitude: candidate.latitude,
         longitude: candidate.longitude,
       });
-
-      // Small delay so UI updates aren't all at once
-      await new Promise((r) => setTimeout(r, 50));
     }
 
     // Clear fixed songs from results (mark as ok)
