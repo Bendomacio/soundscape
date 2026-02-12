@@ -893,30 +893,10 @@
   position: relative;
 }
 
-/* Top fade */
-.crawl-container::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
-  background: linear-gradient(to bottom, var(--glass-bg-dark), transparent);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Bottom fade */
-.crawl-container::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 10px;
-  background: linear-gradient(to top, var(--glass-bg-dark), transparent);
-  pointer-events: none;
-  z-index: 1;
+/* Fade edges using mask — works on any background */
+.crawl-container {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
 }
 
 .crawl-text {

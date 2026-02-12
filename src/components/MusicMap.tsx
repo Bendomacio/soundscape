@@ -35,7 +35,7 @@ function loadGroupingMode(): GroupingMode {
       return saved;
     }
   } catch { /* ignore */ }
-  return 'location';
+  return 'cluster';
 }
 
 interface MusicMapProps {

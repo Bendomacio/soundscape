@@ -4,8 +4,8 @@ import type { SongLocation } from '../types';
 import { hasPlayableLink } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
 
-const CRAWL_SPEED = 20; // px per second
-const CRAWL_HEIGHT = 40; // fixed height, matches the bar's inner height
+const CRAWL_SPEED = 8; // px per second
+const CRAWL_HEIGHT = 52; // fixed height for the crawl box
 
 interface MusicPlayerProps {
   currentSong: SongLocation | null;
@@ -32,6 +32,7 @@ export function MusicPlayer({
   const [imgError, setImgError] = useState(false);
   const crawlTextRef = useRef<HTMLDivElement>(null);
   const [crawlParams, setCrawlParams] = useState<{ duration: number; start: number; end: number } | null>(null);
+  const [crawlKey, setCrawlKey] = useState(0);
   const {
     currentSong: playingSong,
     isPlaying,
@@ -46,6 +47,13 @@ export function MusicPlayer({
     setVolume
   } = useSpotifyPlayer();
   const prevVolumeRef = useRef(volume || 0.5);
+
+  // Reset crawl animation when song changes
+  const songId = currentSong?.id;
+  useEffect(() => {
+    setCrawlParams(null);
+    setCrawlKey(k => k + 1);
+  }, [songId]);
 
   // Measure description text for crawl animation
   const description = currentSong?.locationDescription || '';
@@ -251,7 +259,7 @@ export function MusicPlayer({
         <div className="music-player-container" style={{
           maxWidth: '896px',
           margin: '0 auto',
-          padding: '12px 12px',
+          padding: '6px 12px',
           display: 'flex',
           alignItems: 'center',
           gap: '0px',
@@ -397,9 +405,9 @@ export function MusicPlayer({
               className="crawl-container"
               style={{
                 flex: 1,
-                height: '40px',
-                maxHeight: '40px',
-                fontSize: '10px',
+                height: '52px',
+                maxHeight: '52px',
+                fontSize: '15px',
                 color: 'var(--color-text-muted)',
                 opacity: 0.7,
                 lineHeight: 1.3,
@@ -409,6 +417,7 @@ export function MusicPlayer({
               }}
             >
               <div
+                key={crawlKey}
                 ref={crawlTextRef}
                 className={crawlParams ? 'crawl-text' : ''}
                 style={crawlParams ? {

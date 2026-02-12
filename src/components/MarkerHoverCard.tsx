@@ -200,7 +200,7 @@ export function MarkerHoverCard({ song, onOpenDetail }: MarkerHoverCardProps) {
             className="crawl-container"
             style={{
               marginTop: '6px',
-              fontSize: '10px',
+              fontSize: '13px',
               color: 'var(--color-text-muted)',
               opacity: 0.8,
               lineHeight: 1.4,
