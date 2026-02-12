@@ -247,6 +247,31 @@ interface SongLocation {
 - CSS: `.volume-slider` class in `design-system.css` with custom WebKit/Firefox thumb+track styling
 - `PlaybackMode` type exported from `MusicPlayerContext.tsx`
 
+### Marker Hover Preview Card (`MarkerHoverCard.tsx`, `MusicMap.tsx`)
+- Hovering over a map marker shows a glassmorphism preview card (220px wide) positioned bottom-right of the marker
+- Card contains: album art banner, song title, artist, location pill, play button, and Star Wars-style scrolling description
+- 150ms mouseleave debounce prevents flicker when moving between marker and card
+- Card's play button plays the song without opening the detail panel or interrupting current playback
+- Clicking the card body opens the full detail panel
+- **Mobile**: first tap shows preview card (centered on screen), second tap opens detail panel. Tapping map dismisses card
+- Touch detection via `isTouchDevice()` helper (checks `ontouchstart` / `maxTouchPoints`)
+
+### Star Wars Description Crawl (`design-system.css`, `MusicPlayer.tsx`, `MarkerHoverCard.tsx`)
+- `locationDescription` text scrolls vertically bottom-to-top in a fixed-height container
+- Constant speed (20px/sec) regardless of text length — duration calculated as `(containerHeight + textHeight) / speed`
+- CSS animation uses custom properties `--crawl-start`, `--crawl-end`, `--crawl-duration` set from JS measurements
+- Top and bottom fade gradients (pseudo-elements) for smooth appearance
+- Used in both the hover card (4 lines visible, 52px) and bottom player bar (40px)
+- Short text that fits without overflow displays statically (no animation)
+- `.crawl-container`, `.crawl-text`, `@keyframes crawlScroll` in `design-system.css`
+
+### Song Selection Flow Refactor (`App.tsx`)
+- `handleSongSelectUI` — sets selected/current song for map centering, NO auto-play
+- `handleSongOpenDetail` — opens detail panel, only auto-plays if nothing is currently playing (`!isCurrentlyPlaying`)
+- Marker click on desktop: select + open detail (conditional auto-play)
+- Shuffle and auto-queue still always auto-play (explicit play actions)
+- Hover card play button plays directly without opening detail panel
+
 ## Git Workflow Notes
 
 - GPG signing fails locally, use: `git -c commit.gpgsign=false commit`
