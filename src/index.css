@@ -159,3 +159,24 @@ body {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* Map marker pulse for playing song */
+@keyframes marker-pulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+  50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.1; }
+}
+
+.marker-pulse {
+  animation: marker-pulse 1.5s ease-in-out infinite;
+}
+
+/* Contain map markers below header z-index */
+.mapboxgl-map {
+  position: relative !important;
+  z-index: 0 !important;
+}
+
+/* Offset map controls above the music player bar */
+.mapboxgl-ctrl-bottom-right {
+  bottom: 100px !important;
+}

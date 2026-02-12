@@ -4,9 +4,13 @@ import type { MapRef } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { SongLocation, MapViewState } from '../types';
 import { hasPlayableLink } from '../types';
-import { Music } from 'lucide-react';
+import { Music, X } from 'lucide-react';
 import { useCachedImage } from '../hooks/useCachedImage';
 import { MarkerHoverCard } from './MarkerHoverCard';
+import { ClusterHoverCard } from './ClusterHoverCard';
+import { ClusterMarker } from './ClusterMarker';
+import { DevGroupingToggle } from './DevGroupingToggle';
+import { useMarkerGroups, type GroupingMode, type MarkerGroup } from '../hooks/useMarkerGroups';
 
 // Get Mapbox token from environment variable
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
@@ -14,6 +18,25 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HER
 // Detect touch device (no hover support)
 const isTouchDevice = () =>
   typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+// Spider expansion radius in pixels
+const SPIDER_RADIUS_PX = 50;
+
+// Max songs for spider expansion — larger clusters zoom-to-fit instead
+const SPIDER_MAX_SONGS = 10;
+
+// localStorage key for grouping mode
+const GROUPING_MODE_KEY = 'soundscape_grouping_mode';
+
+function loadGroupingMode(): GroupingMode {
+  try {
+    const saved = localStorage.getItem(GROUPING_MODE_KEY);
+    if (saved === 'off' || saved === 'location' || saved === 'location+proximity' || saved === 'cluster') {
+      return saved;
+    }
+  } catch { /* ignore */ }
+  return 'location';
+}
 
 interface MusicMapProps {
   songs: SongLocation[]; // Songs in range (filtered)
@@ -37,21 +60,21 @@ interface MusicMapProps {
 
 // Generate circle GeoJSON for radius visualization
 function createCircleGeoJSON(
-  centerLat: number, 
-  centerLng: number, 
+  centerLat: number,
+  centerLng: number,
   radiusKm: number,
   points: number = 64
 ): GeoJSON.Feature<GeoJSON.Polygon> {
   const coords: [number, number][] = [];
   const earthRadius = 6371; // km
-  
+
   for (let i = 0; i <= points; i++) {
     const angle = (i / points) * 2 * Math.PI;
     const latOffset = (radiusKm / earthRadius) * (180 / Math.PI) * Math.cos(angle);
     const lngOffset = (radiusKm / earthRadius) * (180 / Math.PI) * Math.sin(angle) / Math.cos(centerLat * Math.PI / 180);
     coords.push([centerLng + lngOffset, centerLat + latOffset]);
   }
-  
+
   return {
     type: 'Feature',
     properties: {},
@@ -120,18 +143,18 @@ const AlbumMarker = React.memo(function AlbumMarker({
     >
       {/* Pulse animation for playing */}
       {isPlaying && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: size + 20,
-          height: size + 20,
-          borderRadius: '50%',
-          background: '#1DB954',
-          opacity: 0.3,
-          animation: 'pulse 1.5s ease-in-out infinite',
-        }} />
+        <div
+          className="marker-pulse"
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: size + 14,
+            height: size + 14,
+            borderRadius: '50%',
+            background: '#1DB954',
+          }}
+        />
       )}
 
       {/* Outer ring - color coded by validity */}
@@ -194,14 +217,39 @@ export function MusicMap({
 }: MusicMapProps) {
   const mapRef = useRef<MapRef>(null);
 
-  // Hover preview card state
+  // Grouping mode
+  const [groupingMode, setGroupingMode] = useState<GroupingMode>(loadGroupingMode);
+
+  const handleGroupingModeChange = useCallback((mode: GroupingMode) => {
+    setGroupingMode(mode);
+    try { localStorage.setItem(GROUPING_MODE_KEY, mode); } catch { /* ignore */ }
+  }, []);
+
+  // Hover preview card state — can hover a single song OR a group
   const [hoveredSong, setHoveredSong] = useState<SongLocation | null>(null);
+  const [hoveredGroup, setHoveredGroup] = useState<MarkerGroup | null>(null);
   const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTouch = useRef(isTouchDevice());
   // Track if a song's hover card has been shown on mobile (first tap = card, second = detail)
   const tappedSongRef = useRef<string | null>(null);
 
+  // Spider expansion state
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+  const [spiderPositions, setSpiderPositions] = useState<Record<string, { latitude: number; longitude: number }>>({});
+  // Pinned card for expanded cluster (separate from hover system)
+  // Stored as lat/lng so it moves with the map
+  const [expandedCardGroup, setExpandedCardGroup] = useState<MarkerGroup | null>(null);
+  const [expandedCardAnchor, setExpandedCardAnchor] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Clear hover state helper
+  const clearHover = useCallback(() => {
+    setHoveredSong(null);
+    setHoveredGroup(null);
+    setHoverPosition(null);
+  }, []);
+
+  // --- Hover handlers for individual songs (AlbumMarker) ---
   const handleMarkerMouseEnter = useCallback((song: SongLocation, e: React.MouseEvent) => {
     if (isTouch.current) return;
     if (hoverTimeoutRef.current) {
@@ -210,16 +258,29 @@ export function MusicMap({
     }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setHoverPosition({ x: rect.right + 8, y: rect.bottom - 8 });
+    setHoveredGroup(null);
     setHoveredSong(song);
+  }, []);
+
+  // --- Hover handlers for clusters (ClusterMarker) ---
+  const handleClusterMouseEnter = useCallback((group: MarkerGroup, e: React.MouseEvent) => {
+    if (isTouch.current) return;
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setHoverPosition({ x: rect.right + 8, y: rect.bottom - 8 });
+    setHoveredSong(null);
+    setHoveredGroup(group);
   }, []);
 
   const handleMarkerMouseLeave = useCallback(() => {
     if (isTouch.current) return;
     hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredSong(null);
-      setHoverPosition(null);
+      clearHover();
     }, 150);
-  }, []);
+  }, [clearHover]);
 
   const handleCardMouseEnter = useCallback(() => {
     if (hoverTimeoutRef.current) {
@@ -230,18 +291,89 @@ export function MusicMap({
 
   const handleCardMouseLeave = useCallback(() => {
     hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredSong(null);
-      setHoverPosition(null);
+      clearHover();
     }, 150);
-  }, []);
+  }, [clearHover]);
 
-  // Mobile tap: first tap = show hover card, second tap = open detail
+  // --- Spider expansion (small clusters) or zoom-to-fit (large clusters) ---
+  const expandCluster = useCallback((group: MarkerGroup) => {
+    const map = mapRef.current;
+    if (!map || group.songs.length <= 1) return;
+
+    clearHover();
+
+    // Large clusters: zoom into the bounding box so sub-groups form naturally
+    if (group.songs.length > SPIDER_MAX_SONGS) {
+      let minLat = Infinity, maxLat = -Infinity;
+      let minLng = Infinity, maxLng = -Infinity;
+      for (const song of group.songs) {
+        if (song.latitude < minLat) minLat = song.latitude;
+        if (song.latitude > maxLat) maxLat = song.latitude;
+        if (song.longitude < minLng) minLng = song.longitude;
+        if (song.longitude > maxLng) maxLng = song.longitude;
+      }
+
+      // If all songs are at nearly the same point, just zoom in a few levels
+      const latSpan = maxLat - minLat;
+      const lngSpan = maxLng - minLng;
+      if (latSpan < 0.001 && lngSpan < 0.001) {
+        map.flyTo({
+          center: [group.longitude, group.latitude],
+          zoom: Math.min(map.getZoom() + 3, 18),
+          duration: 800,
+        });
+      } else {
+        map.fitBounds(
+          [[minLng, minLat], [maxLng, maxLat]],
+          { padding: 80, duration: 800, maxZoom: 18 }
+        );
+      }
+      return;
+    }
+
+    // Small clusters: spider expansion
+    setExpandedGroupId(group.id);
+
+    const center = map.project([group.longitude, group.latitude]);
+    const positions: Record<string, { latitude: number; longitude: number }> = {};
+    const count = group.songs.length;
+    const angleStep = (2 * Math.PI) / count;
+    const spiderRadius = Math.max(SPIDER_RADIUS_PX, count * 12);
+
+    for (let i = 0; i < count; i++) {
+      const angle = angleStep * i - Math.PI / 2; // Start from top
+      const px = center.x + spiderRadius * Math.cos(angle);
+      const py = center.y + spiderRadius * Math.sin(angle);
+      const lngLat = map.unproject([px, py]);
+      positions[group.songs[i].id] = {
+        latitude: lngLat.lat,
+        longitude: lngLat.lng,
+      };
+    }
+
+    setSpiderPositions(positions);
+
+    // Pin the cluster card to the right edge of the spider (stored as lat/lng)
+    const markerHalf = 28;
+    const rightEdge = map.unproject([center.x + spiderRadius + markerHalf + 12, center.y]);
+    setExpandedCardGroup(group);
+    setExpandedCardAnchor({ latitude: rightEdge.lat, longitude: rightEdge.lng });
+  }, [clearHover]);
+
+  const collapseCluster = useCallback(() => {
+    setExpandedGroupId(null);
+    setSpiderPositions({});
+    setExpandedCardGroup(null);
+    setExpandedCardAnchor(null);
+    clearHover();
+  }, [clearHover]);
+
+  // --- Click handlers ---
   const handleMarkerClick = useCallback((song: SongLocation) => {
     if (isTouch.current) {
       if (tappedSongRef.current === song.id && hoveredSong?.id === song.id) {
         // Second tap — open detail panel
-        setHoveredSong(null);
-        setHoverPosition(null);
+        clearHover();
         tappedSongRef.current = null;
         onSongSelect(song);
         onSongOpenDetail(song);
@@ -251,26 +383,50 @@ export function MusicMap({
         const screenW = window.innerWidth;
         const screenH = window.innerHeight;
         setHoverPosition({ x: screenW / 2 - 110, y: screenH / 2 - 140 });
+        setHoveredGroup(null);
         setHoveredSong(song);
         onSongSelect(song);
       }
     } else {
       // Desktop: click goes straight to select + detail
-      setHoveredSong(null);
-      setHoverPosition(null);
+      clearHover();
       onSongSelect(song);
       onSongOpenDetail(song);
     }
-  }, [hoveredSong, onSongSelect, onSongOpenDetail]);
+  }, [hoveredSong, onSongSelect, onSongOpenDetail, clearHover]);
 
-  // Dismiss hover card on map click (mobile)
+  const handleClusterClick = useCallback((group: MarkerGroup, e?: React.MouseEvent) => {
+    // Stop propagation to prevent handleMapClick from immediately collapsing
+    e?.stopPropagation();
+
+    if (isTouch.current) {
+      if (hoveredGroup?.id === group.id) {
+        // Second tap on same cluster — expand it
+        expandCluster(group);
+      } else {
+        // First tap — show cluster hover card
+        const screenW = window.innerWidth;
+        const screenH = window.innerHeight;
+        setHoverPosition({ x: screenW / 2 - 110, y: screenH / 2 - 140 });
+        setHoveredSong(null);
+        setHoveredGroup(group);
+      }
+    } else {
+      // Desktop: click expands cluster directly
+      expandCluster(group);
+    }
+  }, [hoveredGroup, expandCluster]);
+
+  // Dismiss hover card and collapse clusters on map click
   const handleMapClick = useCallback(() => {
-    if (hoveredSong && isTouch.current) {
-      setHoveredSong(null);
-      setHoverPosition(null);
+    if (hoveredSong || hoveredGroup) {
+      clearHover();
       tappedSongRef.current = null;
     }
-  }, [hoveredSong]);
+    if (expandedGroupId) {
+      collapseCluster();
+    }
+  }, [hoveredSong, hoveredGroup, expandedGroupId, clearHover, collapseCluster]);
 
   // Clean up timeout on unmount
   useEffect(() => {
@@ -278,6 +434,9 @@ export function MusicMap({
       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     };
   }, []);
+
+  // Note: we intentionally do NOT collapse on zoom change,
+  // so expansion persists when opening/closing song detail (which triggers flyTo).
 
   // Get song IDs that are in range for quick lookup
   // Filter songs: non-admins only see valid songs (with Spotify URI)
@@ -294,6 +453,9 @@ export function MusicMap({
     const filtered = isAdmin ? allSongs : allSongs.filter(s => hasPlayableLink(s));
     return filtered.filter(s => !inRangeSongIds.has(s.id));
   }, [allSongs, inRangeSongIds, radius, isAdmin]);
+
+  // Group visible songs
+  const markerGroups = useMarkerGroups(visibleSongs, viewState, groupingMode, mapRef);
 
   // Generate radius circle GeoJSON
   const radiusCircle = useMemo(() => {
@@ -313,6 +475,34 @@ export function MusicMap({
       }
     };
   }, [tripRoute]);
+
+  // Generate spider line GeoJSON for expanded cluster
+  const spiderLinesGeoJSON = useMemo(() => {
+    if (!expandedGroupId || Object.keys(spiderPositions).length === 0) return null;
+    const expandedGroup = markerGroups.find(g => g.id === expandedGroupId);
+    if (!expandedGroup) return null;
+
+    const features = expandedGroup.songs.map(song => {
+      const pos = spiderPositions[song.id];
+      if (!pos) return null;
+      return {
+        type: 'Feature' as const,
+        properties: {},
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [expandedGroup.longitude, expandedGroup.latitude],
+            [pos.longitude, pos.latitude],
+          ]
+        }
+      };
+    }).filter(Boolean);
+
+    return {
+      type: 'FeatureCollection' as const,
+      features,
+    };
+  }, [expandedGroupId, spiderPositions, markerGroups]);
 
   // Fly to song when selected
   useEffect(() => {
@@ -399,6 +589,21 @@ export function MusicMap({
           </Source>
         )}
 
+        {/* Spider expansion lines */}
+        {spiderLinesGeoJSON && (
+          <Source id="spider-lines" type="geojson" data={spiderLinesGeoJSON as GeoJSON.FeatureCollection}>
+            <Layer
+              id="spider-lines-layer"
+              type="line"
+              paint={{
+                'line-color': 'rgba(255, 255, 255, 0.3)',
+                'line-width': 1.5,
+                'line-dasharray': [3, 3],
+              }}
+            />
+          </Source>
+        )}
+
         {/* Trip destination marker */}
         {discoveryMode === 'trip' && tripDestination && (
           <Marker latitude={tripDestination.lat} longitude={tripDestination.lng}>
@@ -440,8 +645,8 @@ export function MusicMap({
             <div style={{
               width: 24,
               height: 24,
-              background: discoveryMode === 'nearby' 
-                ? 'linear-gradient(135deg, #10b981, #34d399)' 
+              background: discoveryMode === 'nearby'
+                ? 'linear-gradient(135deg, #10b981, #34d399)'
                 : 'linear-gradient(135deg, #6b7280, #9ca3af)',
               borderRadius: '50%',
               border: '3px solid white',
@@ -482,33 +687,135 @@ export function MusicMap({
           </Marker>
         ))}
 
-        {/* Songs in range (full visibility) */}
-        {visibleSongs.map(song => {
-          const isPlaying = currentSong?.id === song.id;
-          const isSelected = selectedSong?.id === song.id;
+        {/* Grouped song markers */}
+        {markerGroups.map(group => {
+          // If this group is expanded, render individual spider markers instead
+          if (group.id === expandedGroupId && group.songs.length > 1) {
+            return (
+              <React.Fragment key={group.id}>
+                {/* Center collapse button */}
+                <Marker
+                  latitude={group.latitude}
+                  longitude={group.longitude}
+                  anchor="center"
+                >
+                  <div
+                    className="spider-center"
+                    onClick={(e) => { e.stopPropagation(); collapseCluster(); }}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') collapseCluster(); }}
+                    title="Collapse"
+                  >
+                    <X size={12} color="var(--color-text-muted)" />
+                  </div>
+                </Marker>
+
+                {/* Expanded individual markers */}
+                {group.songs.map(song => {
+                  const pos = spiderPositions[song.id];
+                  if (!pos) return null;
+                  const isPlaying = currentSong?.id === song.id;
+                  const isSelected = selectedSong?.id === song.id;
+
+                  return (
+                    <Marker
+                      key={`spider-${song.id}`}
+                      latitude={pos.latitude}
+                      longitude={pos.longitude}
+                      anchor="center"
+                    >
+                      <div className="spider-marker">
+                        <AlbumMarker
+                          song={song}
+                          isPlaying={isPlaying}
+                          isSelected={isSelected}
+                          onClick={() => handleMarkerClick(song)}
+                          onMouseEnter={(e: React.MouseEvent) => handleMarkerMouseEnter(song, e)}
+                          onMouseLeave={handleMarkerMouseLeave}
+                        />
+                      </div>
+                    </Marker>
+                  );
+                })}
+              </React.Fragment>
+            );
+          }
+
+          // Single song — render normal AlbumMarker
+          if (group.songs.length === 1) {
+            const song = group.songs[0];
+            const isPlaying = currentSong?.id === song.id;
+            const isSelected = selectedSong?.id === song.id;
+
+            return (
+              <Marker
+                key={song.id}
+                latitude={song.latitude}
+                longitude={song.longitude}
+                anchor="center"
+              >
+                <AlbumMarker
+                  song={song}
+                  isPlaying={isPlaying}
+                  isSelected={isSelected}
+                  onClick={() => handleMarkerClick(song)}
+                  onMouseEnter={(e: React.MouseEvent) => handleMarkerMouseEnter(song, e)}
+                  onMouseLeave={handleMarkerMouseLeave}
+                />
+              </Marker>
+            );
+          }
+
+          // Multi-song group — render ClusterMarker
+          const isAnyPlaying = group.songs.some(s => currentSong?.id === s.id);
+          const isSelected = group.songs.some(s => selectedSong?.id === s.id);
 
           return (
             <Marker
-              key={song.id}
-              latitude={song.latitude}
-              longitude={song.longitude}
+              key={group.id}
+              latitude={group.latitude}
+              longitude={group.longitude}
               anchor="center"
             >
-              <AlbumMarker
-                song={song}
-                isPlaying={isPlaying}
+              <ClusterMarker
+                group={group}
+                isAnyPlaying={isAnyPlaying}
                 isSelected={isSelected}
-                onClick={() => handleMarkerClick(song)}
-                onMouseEnter={(e: React.MouseEvent) => handleMarkerMouseEnter(song, e)}
+                onClick={(e: React.MouseEvent) => handleClusterClick(group, e)}
+                onMouseEnter={(e: React.MouseEvent) => handleClusterMouseEnter(group, e)}
                 onMouseLeave={handleMarkerMouseLeave}
               />
             </Marker>
           );
         })}
+
+        {/* Pinned card for expanded cluster — rendered as a Marker so it moves with the map */}
+        {expandedCardGroup && expandedCardAnchor && (
+          <Marker
+            latitude={expandedCardAnchor.latitude}
+            longitude={expandedCardAnchor.longitude}
+            anchor="left"
+            style={{ zIndex: 10 }}
+          >
+            <div className="hover-card-inner" style={{ cursor: 'default' }}>
+              <ClusterHoverCard
+                group={expandedCardGroup}
+                isExpanded
+                onOpenDetail={() => {}}
+                onSongSelect={onSongSelect}
+                onSongOpenDetail={onSongOpenDetail}
+              />
+            </div>
+          </Marker>
+        )}
       </Map>
 
-      {/* Hover preview card */}
-      {hoveredSong && hoverPosition && (
+      {/* Dev grouping toggle */}
+      <DevGroupingToggle mode={groupingMode} onChange={handleGroupingModeChange} />
+
+      {/* Hover preview card — for individual songs */}
+      {hoveredSong && !hoveredGroup && hoverPosition && (
         <div
           className="hover-card"
           onMouseEnter={handleCardMouseEnter}
@@ -523,12 +830,34 @@ export function MusicMap({
             onOpenDetail={() => {
               onSongSelect(hoveredSong);
               onSongOpenDetail(hoveredSong);
-              setHoveredSong(null);
-              setHoverPosition(null);
+              clearHover();
             }}
           />
         </div>
       )}
+
+      {/* Hover preview card — for clusters (normal hover, dismisses on mouse leave) */}
+      {hoveredGroup && hoverPosition && !expandedGroupId && (
+        <div
+          className="hover-card"
+          onMouseEnter={handleCardMouseEnter}
+          onMouseLeave={handleCardMouseLeave}
+          style={{
+            left: Math.min(hoverPosition.x, window.innerWidth - 232),
+            top: Math.min(hoverPosition.y, window.innerHeight - 300),
+          }}
+        >
+          <ClusterHoverCard
+            group={hoveredGroup}
+            onOpenDetail={() => {
+              expandCluster(hoveredGroup);
+            }}
+            onSongSelect={onSongSelect}
+            onSongOpenDetail={onSongOpenDetail}
+          />
+        </div>
+      )}
+
     </div>
   );
 }
