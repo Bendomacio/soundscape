@@ -6,9 +6,14 @@ import type { SongLocation, MapViewState } from '../types';
 import { hasPlayableLink } from '../types';
 import { Music } from 'lucide-react';
 import { useCachedImage } from '../hooks/useCachedImage';
+import { MarkerHoverCard } from './MarkerHoverCard';
 
 // Get Mapbox token from environment variable
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || 'YOUR_MAPBOX_TOKEN_HERE';
+
+// Detect touch device (no hover support)
+const isTouchDevice = () =>
+  typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
 interface MusicMapProps {
   songs: SongLocation[]; // Songs in range (filtered)
@@ -16,6 +21,7 @@ interface MusicMapProps {
   currentSong: SongLocation | null;
   selectedSong: SongLocation | null;
   onSongSelect: (song: SongLocation) => void;
+  onSongOpenDetail: (song: SongLocation) => void;
   userLocation: { latitude: number; longitude: number } | null;
   radius: number;
   viewState: MapViewState;
@@ -62,13 +68,17 @@ interface AlbumMarkerProps {
   isPlaying: boolean;
   isSelected: boolean;
   onClick: () => void;
+  onMouseEnter?: (e: React.MouseEvent) => void;
+  onMouseLeave?: () => void;
 }
 
 const AlbumMarker = React.memo(function AlbumMarker({
   song,
   isPlaying,
   isSelected,
-  onClick
+  onClick,
+  onMouseEnter,
+  onMouseLeave,
 }: AlbumMarkerProps) {
   const [imgError, setImgError] = useState(false);
   const { src: cachedSrc, isLoading: imgLoading } = useCachedImage(song.albumArt);
@@ -95,6 +105,8 @@ const AlbumMarker = React.memo(function AlbumMarker({
   return (
     <div
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
@@ -105,7 +117,6 @@ const AlbumMarker = React.memo(function AlbumMarker({
         transition: 'all 0.2s ease',
         position: 'relative',
       }}
-      title={`${song.title} by ${song.artist}${!isValid ? ' (needs Spotify link)' : ''}`}
     >
       {/* Pulse animation for playing */}
       {isPlaying && (
@@ -170,6 +181,7 @@ export function MusicMap({
   currentSong,
   selectedSong,
   onSongSelect,
+  onSongOpenDetail,
   userLocation,
   radius,
   viewState,
@@ -181,6 +193,91 @@ export function MusicMap({
   isAdmin = false
 }: MusicMapProps) {
   const mapRef = useRef<MapRef>(null);
+
+  // Hover preview card state
+  const [hoveredSong, setHoveredSong] = useState<SongLocation | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<{ x: number; y: number } | null>(null);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTouch = useRef(isTouchDevice());
+  // Track if a song's hover card has been shown on mobile (first tap = card, second = detail)
+  const tappedSongRef = useRef<string | null>(null);
+
+  const handleMarkerMouseEnter = useCallback((song: SongLocation, e: React.MouseEvent) => {
+    if (isTouch.current) return;
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setHoverPosition({ x: rect.right + 8, y: rect.bottom - 8 });
+    setHoveredSong(song);
+  }, []);
+
+  const handleMarkerMouseLeave = useCallback(() => {
+    if (isTouch.current) return;
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredSong(null);
+      setHoverPosition(null);
+    }, 150);
+  }, []);
+
+  const handleCardMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleCardMouseLeave = useCallback(() => {
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredSong(null);
+      setHoverPosition(null);
+    }, 150);
+  }, []);
+
+  // Mobile tap: first tap = show hover card, second tap = open detail
+  const handleMarkerClick = useCallback((song: SongLocation) => {
+    if (isTouch.current) {
+      if (tappedSongRef.current === song.id && hoveredSong?.id === song.id) {
+        // Second tap — open detail panel
+        setHoveredSong(null);
+        setHoverPosition(null);
+        tappedSongRef.current = null;
+        onSongSelect(song);
+        onSongOpenDetail(song);
+      } else {
+        // First tap — show hover card centered above bottom player area
+        tappedSongRef.current = song.id;
+        const screenW = window.innerWidth;
+        const screenH = window.innerHeight;
+        setHoverPosition({ x: screenW / 2 - 110, y: screenH / 2 - 140 });
+        setHoveredSong(song);
+        onSongSelect(song);
+      }
+    } else {
+      // Desktop: click goes straight to select + detail
+      setHoveredSong(null);
+      setHoverPosition(null);
+      onSongSelect(song);
+      onSongOpenDetail(song);
+    }
+  }, [hoveredSong, onSongSelect, onSongOpenDetail]);
+
+  // Dismiss hover card on map click (mobile)
+  const handleMapClick = useCallback(() => {
+    if (hoveredSong && isTouch.current) {
+      setHoveredSong(null);
+      setHoverPosition(null);
+      tappedSongRef.current = null;
+    }
+  }, [hoveredSong]);
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
 
   // Get song IDs that are in range for quick lookup
   // Filter songs: non-admins only see valid songs (with Spotify URI)
@@ -241,6 +338,7 @@ export function MusicMap({
         ref={mapRef}
         {...viewState}
         onMove={onMove}
+        onClick={handleMapClick}
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle="mapbox://styles/mapbox/dark-v11"
         style={{ width: '100%', height: '100%' }}
@@ -354,17 +452,17 @@ export function MusicMap({
 
         {/* Songs outside range (dimmed) */}
         {songsOutOfRange.map(song => (
-          <Marker 
-            key={`dim-${song.id}`} 
-            latitude={song.latitude} 
+          <Marker
+            key={`dim-${song.id}`}
+            latitude={song.latitude}
             longitude={song.longitude}
             anchor="center"
           >
             <div
-              onClick={() => onSongSelect(song)}
+              onClick={() => handleMarkerClick(song)}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSongSelect(song) }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleMarkerClick(song) }}
               style={{
                 width: 32,
                 height: 32,
@@ -378,7 +476,6 @@ export function MusicMap({
                 justifyContent: 'center',
                 transition: 'all 0.2s ease'
               }}
-              title={`${song.title} by ${song.artist} (outside range)`}
             >
               <Music size={14} color="#666" />
             </div>
@@ -389,11 +486,11 @@ export function MusicMap({
         {visibleSongs.map(song => {
           const isPlaying = currentSong?.id === song.id;
           const isSelected = selectedSong?.id === song.id;
-          
+
           return (
-            <Marker 
-              key={song.id} 
-              latitude={song.latitude} 
+            <Marker
+              key={song.id}
+              latitude={song.latitude}
               longitude={song.longitude}
               anchor="center"
             >
@@ -401,13 +498,37 @@ export function MusicMap({
                 song={song}
                 isPlaying={isPlaying}
                 isSelected={isSelected}
-                onClick={() => onSongSelect(song)}
+                onClick={() => handleMarkerClick(song)}
+                onMouseEnter={(e: React.MouseEvent) => handleMarkerMouseEnter(song, e)}
+                onMouseLeave={handleMarkerMouseLeave}
               />
             </Marker>
           );
         })}
       </Map>
 
+      {/* Hover preview card */}
+      {hoveredSong && hoverPosition && (
+        <div
+          className="hover-card"
+          onMouseEnter={handleCardMouseEnter}
+          onMouseLeave={handleCardMouseLeave}
+          style={{
+            left: Math.min(hoverPosition.x, window.innerWidth - 232),
+            top: Math.min(hoverPosition.y, window.innerHeight - 280),
+          }}
+        >
+          <MarkerHoverCard
+            song={hoveredSong}
+            onOpenDetail={() => {
+              onSongSelect(hoveredSong);
+              onSongOpenDetail(hoveredSong);
+              setHoveredSong(null);
+              setHoverPosition(null);
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

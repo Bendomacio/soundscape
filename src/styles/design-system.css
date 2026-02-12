@@ -883,3 +883,70 @@
   color: #1DB954;
   border: 1px solid rgba(29, 185, 84, 0.3);
 }
+
+/* ========================================
+   CRAWL SCROLL (Star Wars style, bottom-up)
+   ======================================== */
+
+.crawl-container {
+  overflow: hidden;
+  position: relative;
+}
+
+/* Top fade */
+.crawl-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: linear-gradient(to bottom, var(--glass-bg-dark), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Bottom fade */
+.crawl-container::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: linear-gradient(to top, var(--glass-bg-dark), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.crawl-text {
+  /* --crawl-distance and --crawl-duration set via inline style from JS */
+  animation: crawlScroll var(--crawl-duration, 12s) linear infinite;
+}
+
+@keyframes crawlScroll {
+  0% { transform: translateY(var(--crawl-start)); }
+  100% { transform: translateY(var(--crawl-end)); }
+}
+
+/* ========================================
+   HOVER PREVIEW CARD
+   ======================================== */
+
+.hover-card {
+  position: absolute;
+  z-index: var(--z-popover);
+  pointer-events: auto;
+  animation: scaleIn 0.15s ease-out;
+}
+
+.hover-card-inner {
+  width: 220px;
+  background: var(--glass-bg-dark);
+  backdrop-filter: blur(var(--glass-blur-heavy));
+  -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
+  border: 1px solid var(--glass-border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+}

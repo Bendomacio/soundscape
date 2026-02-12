@@ -146,7 +146,7 @@ function OAuthCallbackHandler() {
 function AppContent() {
   // Auth & Spotify player
   const { user, profile } = useAuth();
-  const { play, registerOnSongEnd } = useSpotifyPlayer();
+  const { play, isPlaying: isCurrentlyPlaying, registerOnSongEnd } = useSpotifyPlayer();
   
   // State
   const [songs, setSongs] = useState<SongLocation[]>([]);
@@ -384,15 +384,23 @@ function AppContent() {
     return () => registerOnSongEnd(null);
   }, [registerOnSongEnd, getPlayableSongsByDistance, play]);
 
-  // Track played songs when user manually selects — auto-play on select
-  const handleSongSelectTracked = useCallback((song: SongLocation) => {
+  // Select a song for UI display (map centering) — NO auto-play
+  const handleSongSelectUI = useCallback((song: SongLocation) => {
     setSelectedSong(song);
     setCurrentSong(song);
     playedSongIds.current.add(song.id);
-    if (hasPlayableLink(song)) {
+  }, []);
+
+  // Open detail panel for a song — only auto-play if nothing is currently playing
+  const handleSongOpenDetail = useCallback((song: SongLocation) => {
+    setSelectedSong(song);
+    setCurrentSong(song);
+    setShowDetailPanel(true);
+    playedSongIds.current.add(song.id);
+    if (!isCurrentlyPlaying && hasPlayableLink(song)) {
       play(song);
     }
-  }, [play]);
+  }, [play, isCurrentlyPlaying]);
 
   // Handle trip destination selection
   const handleTripDestinationSet = useCallback(async (destination: { lat: number; lng: number; name: string }) => {
@@ -459,7 +467,7 @@ function AppContent() {
   }, []);
 
   // Handlers
-  const handleSongSelect = handleSongSelectTracked;
+  const handleSongSelect = handleSongSelectUI;
 
   const handleShuffle = useCallback(() => {
     // Only shuffle songs with any playable link
@@ -657,6 +665,7 @@ function AppContent() {
           currentSong={currentSong}
           selectedSong={selectedSong}
           onSongSelect={handleSongSelect}
+          onSongOpenDetail={handleSongOpenDetail}
           userLocation={userLocation}
           radius={discoveryMode === 'trip' ? 0 : radius}
           viewState={viewState}

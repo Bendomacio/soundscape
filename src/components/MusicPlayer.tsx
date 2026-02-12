@@ -1,8 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { MapPin, Shuffle, Music, Play, Pause, Loader2, Volume2, Volume1, VolumeX } from 'lucide-react';
 import type { SongLocation } from '../types';
 import { hasPlayableLink } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
+
+const CRAWL_SPEED = 20; // px per second
+const CRAWL_HEIGHT = 40; // fixed height, matches the bar's inner height
 
 interface MusicPlayerProps {
   currentSong: SongLocation | null;
@@ -27,6 +30,8 @@ export function MusicPlayer({
   discoveryMode = 'explore',
 }: MusicPlayerProps) {
   const [imgError, setImgError] = useState(false);
+  const crawlTextRef = useRef<HTMLDivElement>(null);
+  const [crawlParams, setCrawlParams] = useState<{ duration: number; start: number; end: number } | null>(null);
   const {
     currentSong: playingSong,
     isPlaying,
@@ -41,6 +46,26 @@ export function MusicPlayer({
     setVolume
   } = useSpotifyPlayer();
   const prevVolumeRef = useRef(volume || 0.5);
+
+  // Measure description text for crawl animation
+  const description = currentSong?.locationDescription || '';
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (crawlTextRef.current) {
+        const textH = crawlTextRef.current.scrollHeight;
+        if (textH > CRAWL_HEIGHT) {
+          const start = CRAWL_HEIGHT;
+          const end = -textH;
+          setCrawlParams({ duration: (start - end) / CRAWL_SPEED, start, end });
+        } else {
+          setCrawlParams(null);
+        }
+      } else {
+        setCrawlParams(null);
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [description]);
 
   // Check if the currently displayed song is the one playing
   const isThisSongPlaying = playingSong?.id === currentSong?.id && isPlaying;
@@ -229,7 +254,7 @@ export function MusicPlayer({
           padding: '12px 12px',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
+          gap: '0px',
           position: 'relative'
         }}>
           {/* Song info - clickable to open detail panel */}
@@ -240,8 +265,9 @@ export function MusicPlayer({
               display: 'flex',
               alignItems: 'center',
               gap: '10px',
-              flex: 1,
+              flex: '0 1 auto',
               minWidth: 0,
+              maxWidth: '240px',
               textAlign: 'left',
               background: 'none',
               border: 'none',
@@ -365,8 +391,39 @@ export function MusicPlayer({
             </div>
           </button>
 
+          {/* Description crawl — separate flex child, fixed height to not expand the bar */}
+          {description && (
+            <div
+              className="crawl-container"
+              style={{
+                flex: 1,
+                height: '40px',
+                maxHeight: '40px',
+                fontSize: '10px',
+                color: 'var(--color-text-muted)',
+                opacity: 0.7,
+                lineHeight: 1.3,
+                minWidth: 0,
+                alignSelf: 'center',
+                marginLeft: '10px',
+              }}
+            >
+              <div
+                ref={crawlTextRef}
+                className={crawlParams ? 'crawl-text' : ''}
+                style={crawlParams ? {
+                  '--crawl-duration': `${crawlParams.duration}s`,
+                  '--crawl-start': `${crawlParams.start}px`,
+                  '--crawl-end': `${crawlParams.end}px`,
+                } as React.CSSProperties : undefined}
+              >
+                {description}
+              </div>
+            </div>
+          )}
+
           {/* Control buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, marginLeft: '10px' }}>
             {/* Shuffle button */}
             <button
               className="music-player-shuffle btn-glass"
