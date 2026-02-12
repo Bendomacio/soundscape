@@ -4,6 +4,7 @@ import './utils/uiTests'; // Auto-runs UI tests in dev mode
 import { MusicMap } from './components/MusicMap';
 import { MusicPlayer } from './components/MusicPlayer';
 import { DiscoveryPanel } from './components/DiscoveryPanel';
+import type { ZoomLevel } from './components/DiscoveryPanel';
 import { SongDetailPanel } from './components/SongDetailPanel';
 import { SubmitSongModal } from './components/SubmitSongModal';
 import { Header } from './components/Header';
@@ -161,6 +162,7 @@ function AppContent() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [radius, setRadius] = useState(5);
   const [discoveryMode, setDiscoveryMode] = useState<'nearby' | 'explore' | 'trip'>('explore');
+  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('default');
 
   // Trip mode state
   const [tripDestination, setTripDestination] = useState<{ lat: number; lng: number; name: string } | null>(null);
@@ -466,6 +468,26 @@ function AppContent() {
     setTripSongsOnRoute([]);
   }, []);
 
+  // Zoom level handler (explore mode)
+  const handleZoomLevelChange = useCallback((level: ZoomLevel) => {
+    setZoomLevel(level);
+    const center = userLocation || { latitude: 51.5074, longitude: -0.1278 };
+    const zoomMap: Record<ZoomLevel, number> = {
+      default: 13,
+      country: 5.5,
+      world: 2,
+    };
+    if (level === 'country' || level === 'world') {
+      setRadius(0);
+    }
+    setViewState(prev => ({
+      ...prev,
+      latitude: center.latitude,
+      longitude: center.longitude,
+      zoom: zoomMap[level],
+    }));
+  }, [userLocation]);
+
   // Handlers
   const handleSongSelect = handleSongSelectUI;
 
@@ -685,7 +707,22 @@ function AppContent() {
         songCount={songsInRadius.length}
         totalSongCount={songs.length}
         mode={discoveryMode}
-        onModeChange={setDiscoveryMode}
+        onModeChange={(mode) => {
+          setDiscoveryMode(mode);
+          if (mode === 'nearby') {
+            setRadius(10);
+            setZoomLevel('default');
+            const center = userLocation || { latitude: 51.5074, longitude: -0.1278 };
+            setViewState(prev => ({
+              ...prev,
+              latitude: center.latitude,
+              longitude: center.longitude,
+              zoom: 13,
+            }));
+          } else if (mode !== 'explore' && zoomLevel !== 'default') {
+            setZoomLevel('default');
+          }
+        }}
         onLocationSearch={(lat, lng, name) => {
           setExploreCenter({ latitude: lat, longitude: lng, name });
           setDiscoveryMode('explore');
@@ -719,6 +756,8 @@ function AppContent() {
             );
           }
         }}
+        zoomLevel={zoomLevel}
+        onZoomLevelChange={handleZoomLevelChange}
         onTripDestinationSet={handleTripDestinationSet}
         tripSongsCount={tripSongsOnRoute.length}
         tripDestination={tripDestination?.name || null}

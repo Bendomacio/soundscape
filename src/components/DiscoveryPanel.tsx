@@ -15,6 +15,8 @@ import {
   Sparkles
 } from 'lucide-react';
 
+export type ZoomLevel = 'default' | 'country' | 'world';
+
 interface DiscoveryPanelProps {
   radius: number;
   onRadiusChange: (value: number) => void;
@@ -24,6 +26,9 @@ interface DiscoveryPanelProps {
   onModeChange: (mode: 'nearby' | 'explore' | 'trip') => void;
   onLocationSearch: (lat: number, lng: number, name: string) => void;
   onUseMyLocation: () => void;
+  // Zoom level (explore mode)
+  zoomLevel?: ZoomLevel;
+  onZoomLevelChange?: (level: ZoomLevel) => void;
   // Trip mode props
   onTripDestinationSet?: (destination: { lat: number; lng: number; name: string }) => void;
   tripSongsCount?: number;
@@ -44,6 +49,12 @@ const RADIUS_PRESETS = [
   { value: 5, label: '5km', icon: '🏘️' },
   { value: 10, label: '10km', icon: '🌆' },
   { value: 0, label: 'All', icon: '🌍' }
+];
+
+const ZOOM_LEVEL_PRESETS: { value: ZoomLevel; label: string; icon: React.ReactNode }[] = [
+  { value: 'default', label: 'Default', icon: <MapPin size={11} /> },
+  { value: 'country', label: 'Country', icon: <Compass size={11} /> },
+  { value: 'world', label: 'World', icon: <Globe size={11} /> },
 ];
 
 const getModeConfig = (mode: 'nearby' | 'explore' | 'trip') => {
@@ -87,6 +98,8 @@ export function DiscoveryPanel({
   onModeChange,
   onLocationSearch,
   onUseMyLocation,
+  zoomLevel = 'default',
+  onZoomLevelChange,
   onTripDestinationSet,
   tripSongsCount = 0,
   tripDestination,
@@ -366,6 +379,36 @@ export function DiscoveryPanel({
                 {preset.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Zoom Level Presets (explore mode only) */}
+        {mode === 'explore' && onZoomLevelChange && (
+          <div style={{ marginTop: '8px' }}>
+            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Zoom Level
+            </div>
+            <div className="toggle-group" style={{ padding: '3px' }}>
+              {ZOOM_LEVEL_PRESETS.map(preset => (
+                <button
+                  key={preset.value}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onZoomLevelChange(preset.value);
+                  }}
+                  className={`toggle-item ${zoomLevel === preset.value ? 'toggle-item-active' : ''}`}
+                  style={{
+                    padding: '8px 10px',
+                    fontSize: '12px',
+                    gap: '4px',
+                    ...(zoomLevel === preset.value ? { background: 'var(--gradient-purple)' } : {})
+                  }}
+                >
+                  {preset.icon}
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
