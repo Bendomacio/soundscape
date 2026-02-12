@@ -107,7 +107,7 @@ export const ClusterMarker = React.memo(function ClusterMarker({
         boxShadow: `0 ${isAnyPlaying ? '0' : '4px'} ${isAnyPlaying ? '25px' : '15px'} ${glowColor}`,
         position: 'relative',
       }}>
-        {/* 2x2 grid of album art */}
+        {/* Album art grid — half-and-half for 2, 2x2 for 3+ */}
         <div style={{
           width: '100%',
           height: '100%',
@@ -115,7 +115,7 @@ export const ClusterMarker = React.memo(function ClusterMarker({
           overflow: 'hidden',
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
-          gridTemplateRows: '1fr 1fr',
+          gridTemplateRows: count === 2 ? '1fr' : '1fr 1fr',
           gap: '1px',
           background: '#1a1a1a',
         }}>
@@ -142,9 +142,9 @@ export const ClusterMarker = React.memo(function ClusterMarker({
               </div>
             );
           })}
-          {/* Fill empty cells if fewer than 4 songs */}
-          {gridSongs.length < 4 && Array.from({ length: 4 - gridSongs.length }).map((_, i) => (
-            <div key={`empty-${i}`} style={{
+          {/* Fill empty cell if 3 songs */}
+          {gridSongs.length === 3 && (
+            <div key="empty-0" style={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -152,7 +152,7 @@ export const ClusterMarker = React.memo(function ClusterMarker({
             }}>
               <Music size={10} color="#444" />
             </div>
-          ))}
+          )}
         </div>
 
         {/* Count badge */}
