@@ -34,9 +34,11 @@ Soundscape is a location-based music discovery app built with React 19, TypeScri
    - **Nearby** - user's GPS location
    - **Explore** - map center or searched location
    - **Trip Mode** - songs within 500m of a route to a destination (uses Mapbox Directions API)
-4. **Spotify playback** supports two methods via `SpotifyPlayerContext`:
-   - Web Playback SDK for Premium users (full playback control)
-   - Embed/IFrame API fallback for non-Premium users (30-second previews)
+4. **Spotify playback** supports three methods via `MusicPlayerContext`:
+   - Web Playback SDK for Premium users (full playback control + volume)
+   - Deezer preview via native `<audio>` element (30-second preview with volume control, no auth needed)
+   - Embed/IFrame API fallback (30-second previews, no volume control)
+   - Users choose between "Sample" (Deezer preview) and "Full Player" (embed) via Playback Mode setting
 
 ### Key Contexts
 
@@ -66,6 +68,15 @@ Soundscape is a location-based music discovery app built with React 19, TypeScri
 - All song.link API calls go through `/api/songlink?url=...` to avoid CORS issues
 - Vite dev server proxies these requests directly to song.link (configured in `vite.config.ts`)
 - Used by: `lib/spotifyLookup.ts`, `lib/spotify.ts`, `lib/providers/spotify.ts`
+
+### Deezer Preview Proxy
+
+- **`api/deezer-preview.ts`**: Vercel Edge Function that proxies Deezer search API requests
+- Called via `/api/deezer-preview?title=...&artist=...` to find 30-second preview URLs
+- No authentication required — Deezer's search API is free and public
+- Vite dev server proxies to `https://api.deezer.com/search` (configured in `vite.config.ts`)
+- Used by: `MusicPlayerContext.tsx` in "Sample" playback mode
+- Returns raw Deezer response; client extracts `data[0].preview` for the MP3 URL
 
 ## UI Testing Requirements
 
@@ -222,6 +233,19 @@ interface SongLocation {
 - Bulk select + "Apply Fixes" updates coordinates in DB
 - **CSV Import integration**: after Spotify lookup, geo-validates imported entries and flags `geo_mismatch` issues with one-click "Accept" to use suggested coordinates
 - Requires `VITE_GOOGLE_MAPS_API_KEY` with Geocoding API enabled
+
+### Volume Control & Playback Mode (`MusicPlayer.tsx`, `MusicPlayerContext.tsx`, `Header.tsx`)
+- **Volume slider** in bottom bar to the right of Play button, with mute/unmute icon toggle
+- Volume persisted in `localStorage` under `soundscape_volume` (default 0.5)
+- Three volume control paths:
+  - **Premium SDK**: `player.setVolume()` + debounced Spotify Web API `PUT /v1/me/player/volume` backup
+  - **Sample mode**: native `<audio>` element `.volume` property (Deezer 30-second previews)
+  - **Embed fallback**: no volume control (cross-origin iframe limitation)
+- **Playback Mode** toggle in user dropdown menu (persisted in `localStorage` as `soundscape_playback_mode`):
+  - **Sample** (default): searches Deezer by title+artist, plays preview via `<audio>` — volume control works
+  - **Full Player**: uses Spotify embed iframe directly — no volume control but full Spotify experience
+- CSS: `.volume-slider` class in `design-system.css` with custom WebKit/Firefox thumb+track styling
+- `PlaybackMode` type exported from `MusicPlayerContext.tsx`
 
 ## Git Workflow Notes
 
