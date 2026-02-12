@@ -18,6 +18,18 @@ export default defineConfig({
           return `/v1-alpha.1/links?url=${encodeURIComponent(targetUrl || '')}`;
         },
       },
+      // Proxy Deezer API requests in development (for preview URLs)
+      '/api/deezer-preview': {
+        target: 'https://api.deezer.com',
+        changeOrigin: true,
+        rewrite: (path) => {
+          const url = new URL(path, 'http://localhost');
+          const title = url.searchParams.get('title') || '';
+          const artist = url.searchParams.get('artist') || '';
+          const query = `track:"${title}" artist:"${artist}"`;
+          return `/search?q=${encodeURIComponent(query)}&limit=5`;
+        },
+      },
     },
   },
 })

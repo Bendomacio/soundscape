@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Plus, User, Music2, LogOut, Settings, Shield, FolderOpen, Check, Unlink, Sparkles, Link2, ExternalLink, Crown, AlertCircle, HelpCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useMusicPlayer } from '../contexts/MusicPlayerContext';
+import { useMusicPlayer, type PlaybackMode } from '../contexts/MusicPlayerContext';
 import { LoadingSpinner, UserAvatar } from './ui';
 import type { MusicProvider } from '../types';
 import { isSoundCloudConnectionPending } from '../lib/providers/auth';
@@ -66,7 +66,9 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
     confirmSoundCloud,
     setSoundCloudPremiumStatus,
     userPreference,
-    setProviderPreference
+    setProviderPreference,
+    playbackMode,
+    setPlaybackMode
   } = useMusicPlayer();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showDevMenu, setShowDevMenu] = useState(false);
@@ -779,6 +781,52 @@ export function Header({ onSubmitClick, onLoginClick, onAdminClick, onMySubmissi
                   </div>
                   <p style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '8px', lineHeight: 1.4 }}>
                     Choose your preferred music service. We'll use this when a song has multiple links.
+                  </p>
+                </div>
+
+                {/* Playback Mode Section */}
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--glass-border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-text-muted)' }}>
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>Playback Mode</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {([
+                      { mode: 'sample' as PlaybackMode, label: 'Sample', desc: '30s preview with volume control' },
+                      { mode: 'default' as PlaybackMode, label: 'Full Player', desc: 'Spotify embed player' },
+                    ]).map(({ mode, label }) => {
+                      const isSelected = playbackMode === mode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => setPlaybackMode(mode)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            background: isSelected ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                            border: isSelected ? '1px solid var(--color-primary)' : '1px solid transparent',
+                            borderRadius: '8px',
+                            color: isSelected ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontSize: '11px',
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <span>{label}</span>
+                          {isSelected && <Check size={12} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '8px', lineHeight: 1.4 }}>
+                    {playbackMode === 'sample'
+                      ? 'Plays a 30-second preview with volume control.'
+                      : 'Uses the full Spotify embed player (no volume control).'}
                   </p>
                 </div>
 

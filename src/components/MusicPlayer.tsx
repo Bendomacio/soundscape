@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { MapPin, Shuffle, Music, Play, Pause, Loader2, Volume2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { MapPin, Shuffle, Music, Play, Pause, Loader2, Volume2, Volume1, VolumeX } from 'lucide-react';
 import type { SongLocation } from '../types';
 import { hasPlayableLink } from '../types';
 import { useSpotifyPlayer } from '../contexts/SpotifyPlayerContext';
@@ -33,11 +33,14 @@ export function MusicPlayer({
     isLoading,
     position,
     duration,
+    volume,
     connection,
     play,
     togglePlayPause,
-    seek
+    seek,
+    setVolume
   } = useSpotifyPlayer();
+  const prevVolumeRef = useRef(volume || 0.5);
 
   // Check if the currently displayed song is the one playing
   const isThisSongPlaying = playingSong?.id === currentSong?.id && isPlaying;
@@ -52,6 +55,17 @@ export function MusicPlayer({
       play(currentSong);
     }
   };
+
+  const handleToggleMute = () => {
+    if (volume > 0) {
+      prevVolumeRef.current = volume;
+      setVolume(0);
+    } else {
+      setVolume(prevVolumeRef.current || 0.5);
+    }
+  };
+
+  const VolumeIcon = volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!duration || !connection.isPremium) return;
@@ -414,6 +428,46 @@ export function MusicPlayer({
                 <Play size={22} fill="currentColor" style={{ marginLeft: '2px' }} />
               )}
             </button>
+
+            {/* Volume control */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: '2px' }}>
+              <button
+                onClick={handleToggleMute}
+                aria-label={volume === 0 ? 'Unmute' : 'Mute'}
+                title={volume === 0 ? 'Unmute' : 'Mute'}
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '50%',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: volume === 0 ? 'var(--color-text-muted)' : 'var(--color-text)',
+                  opacity: 0.8,
+                  transition: 'opacity 0.2s ease, color 0.2s ease',
+                  flexShrink: 0,
+                }}
+              >
+                <VolumeIcon size={16} />
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="volume-slider"
+                aria-label="Volume"
+                style={{
+                  background: `linear-gradient(to right, var(--color-primary) 0%, var(--color-primary) ${volume * 100}%, rgba(255, 255, 255, 0.12) ${volume * 100}%, rgba(255, 255, 255, 0.12) 100%)`,
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

@@ -44,6 +44,8 @@ import {
   setSoundCloudPremium
 } from '../lib/providers/auth';
 
+export type PlaybackMode = 'sample' | 'default';
+
 interface MusicPlayerState {
   currentSong: SongLocation | null;
   isPlaying: boolean;
@@ -51,6 +53,8 @@ interface MusicPlayerState {
   error: string | null;
   position: number;
   duration: number;
+  volume: number;
+  playbackMode: PlaybackMode;
   // Multi-provider support
   currentProvider: MusicProvider | null;
   userPreference: MusicProvider;
@@ -73,6 +77,8 @@ interface MusicPlayerContextType extends MusicPlayerState {
   togglePlayPause: () => void;
   stop: () => void;
   seek: (position: number) => void;
+  setVolume: (volume: number) => void;
+  setPlaybackMode: (mode: PlaybackMode) => void;
   connectSpotify: () => void;
   disconnectSpotify: () => void;
   // Multi-provider connection support
@@ -107,6 +113,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     error: null,
     position: 0,
     duration: 0,
+    volume: parseFloat(localStorage.getItem('soundscape_volume') || '0.5'),
+    playbackMode: (localStorage.getItem('soundscape_playback_mode') as PlaybackMode) || 'sample',
     currentProvider: null,
     userPreference: getPreferenceFromCookie() || 'spotify'
   });
@@ -130,6 +138,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   const deviceIdRef = useRef<string | null>(null);
   const embedControllerRef = useRef<SpotifyEmbedController | null>(null);
   const genericEmbedRef = useRef<HTMLIFrameElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const authRef = useRef<SpotifyUserAuth | null>(null);
   const positionIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -269,6 +278,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const auth = await getSpotifyUserAuth();
     if (!auth || !window.Spotify) return;
 
+    const storedVolume = parseFloat(localStorage.getItem('soundscape_volume') || '0.5');
     const player = new window.Spotify.Player({
       name: 'Soundscape Player',
       getOAuthToken: async (cb) => {
@@ -277,7 +287,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           cb(currentAuth.accessToken);
         }
       },
-      volume: 0.5
+      volume: storedVolume
     });
 
     player.addListener('ready', ({ device_id }: { device_id: string }) => {
@@ -515,6 +525,61 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     );
   }, []);
 
+  // Fetch preview URL from Deezer (free, no auth) and play via native <audio> element
+  const playWithPreview = useCallback(async (song: SongLocation): Promise<boolean> => {
+    try {
+      // Search Deezer for a matching track preview
+      const response = await fetch(
+        `/api/deezer-preview?title=${encodeURIComponent(song.title)}&artist=${encodeURIComponent(song.artist)}`
+      );
+      if (!response.ok) return false;
+
+      const data = await response.json();
+      const previewUrl = data.data?.[0]?.preview;
+      if (!previewUrl) return false;
+
+      // Clean up any existing embed
+      if (embedControllerRef.current) {
+        try { embedControllerRef.current.destroy(); } catch {}
+        embedControllerRef.current = null;
+      }
+      if (containerRef.current) containerRef.current.innerHTML = '';
+
+      // Create or reuse audio element
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+      }
+      const audio = audioRef.current;
+      const currentVolume = parseFloat(localStorage.getItem('soundscape_volume') || '0.5');
+      audio.volume = currentVolume;
+      audio.src = previewUrl;
+
+      const songId = song.id;
+
+      audio.onplay = () => {
+        setState(prev => prev.currentSong?.id === songId ? { ...prev, isPlaying: true, isLoading: false } : prev);
+      };
+      audio.onpause = () => {
+        setState(prev => prev.currentSong?.id === songId ? { ...prev, isPlaying: false } : prev);
+      };
+      audio.ontimeupdate = () => {
+        setState(prev => prev.currentSong?.id === songId
+          ? { ...prev, position: Math.floor(audio.currentTime * 1000), duration: Math.floor((audio.duration || 0) * 1000) }
+          : prev);
+      };
+      audio.onended = () => {
+        setState(prev => prev.currentSong?.id === songId ? { ...prev, isPlaying: false, position: 0 } : prev);
+        onSongEndRef.current?.();
+      };
+
+      await audio.play();
+      return true;
+    } catch (error) {
+      logger.warn('Preview playback failed:', error);
+      return false;
+    }
+  }, []);
+
   const playWithGenericEmbed = useCallback((song: SongLocation, provider: MusicProvider, id: string, retryCount = 0) => {
     const container = containerRef.current;
     if (!container) {
@@ -565,29 +630,33 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     const best = getBestProvider(song, state.userPreference);
 
     if (!best) {
-      setState({
+      setState(prev => ({
         currentSong: song,
         isPlaying: false,
         isLoading: false,
         error: 'No playable link available',
         position: 0,
         duration: 0,
+        volume: prev.volume,
+        playbackMode: prev.playbackMode,
         currentProvider: null,
         userPreference: state.userPreference
-      });
+      }));
       return;
     }
 
-    setState({
+    setState(prev => ({
       currentSong: song,
       isPlaying: false,
       isLoading: true,
       error: null,
       position: 0,
       duration: 0,
+      volume: prev.volume,
+      playbackMode: prev.playbackMode,
       currentProvider: best.provider,
       userPreference: state.userPreference
-    });
+    }));
 
     // For Spotify, try Web Playback SDK first if premium
     if (best.provider === 'spotify') {
@@ -601,18 +670,29 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         });
         return;
       }
-      // Fall back to Spotify embed
-      playWithSpotifyEmbed(song, best.id);
+      if (state.playbackMode === 'sample') {
+        // Sample mode: try Deezer preview first (gives us volume control), fall back to embed
+        playWithPreview(song).then(success => {
+          if (!success) {
+            playWithSpotifyEmbed(song, best.id);
+          }
+        });
+      } else {
+        // Default mode: use embed directly
+        playWithSpotifyEmbed(song, best.id);
+      }
     } else {
       // Use generic embed for other providers
       playWithGenericEmbed(song, best.provider, best.id);
     }
-  }, [state.userPreference, connection.isPremium, playWithSDK, playWithSpotifyEmbed, playWithGenericEmbed]);
+  }, [state.userPreference, state.playbackMode, connection.isPremium, playWithSDK, playWithSpotifyEmbed, playWithPreview, playWithGenericEmbed]);
 
   const pause = useCallback(async () => {
     if (state.currentProvider === 'spotify') {
       if (playerRef.current && connection.isPremium) {
         await playerRef.current.pause();
+      } else if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause();
       } else if (embedControllerRef.current) {
         try {
           embedControllerRef.current.pause();
@@ -621,8 +701,6 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
         }
       }
     }
-    // For other providers, we can't control the iframe directly
-    // but we can update the state
     setState(prev => ({ ...prev, isPlaying: false }));
   }, [state.currentProvider, connection.isPremium]);
 
@@ -630,6 +708,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     if (state.currentProvider === 'spotify') {
       if (playerRef.current && connection.isPremium) {
         await playerRef.current.resume();
+      } else if (audioRef.current && audioRef.current.src) {
+        try { await audioRef.current.play(); } catch {}
       } else if (embedControllerRef.current) {
         try {
           embedControllerRef.current.resume();
@@ -652,6 +732,13 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           logger.warn('SDK togglePlay failed, reverting state', err);
           setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
         }
+      } else if (audioRef.current && audioRef.current.src) {
+        // Native audio element (preview playback)
+        if (audioRef.current.paused) {
+          try { await audioRef.current.play(); } catch {}
+        } else {
+          audioRef.current.pause();
+        }
       } else if (embedControllerRef.current) {
         // Optimistically toggle UI state — embed playback_update will correct if needed
         setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
@@ -659,7 +746,6 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
           embedControllerRef.current.togglePlay();
         } catch (err) {
           logger.warn('Failed to toggle play on embed controller', err);
-          // Revert optimistic update and fall back to explicit pause/resume
           setState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
           state.isPlaying ? pause() : resume();
         }
@@ -679,9 +765,51 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     }
   }, [state.currentProvider, connection.isPremium]);
 
+  const volumeApiTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const setVolume = useCallback((volume: number) => {
+    const clamped = Math.max(0, Math.min(1, volume));
+    setState(prev => ({ ...prev, volume: clamped }));
+    localStorage.setItem('soundscape_volume', String(clamped));
+
+    // Native audio element (preview playback)
+    if (audioRef.current) {
+      audioRef.current.volume = clamped;
+    }
+
+    // SDK local volume (immediate)
+    if (playerRef.current) {
+      playerRef.current.setVolume(clamped);
+    }
+
+    // Spotify Web API volume as backup (debounced to avoid excessive calls)
+    if (connection.isPremium && deviceIdRef.current) {
+      if (volumeApiTimerRef.current) clearTimeout(volumeApiTimerRef.current);
+      volumeApiTimerRef.current = setTimeout(async () => {
+        const auth = await getSpotifyUserAuth();
+        if (auth) {
+          fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(clamped * 100)}&device_id=${deviceIdRef.current}`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${auth.accessToken}` }
+          }).catch(() => {});
+        }
+      }, 150);
+    }
+  }, [connection.isPremium]);
+
+  const setPlaybackMode = useCallback((mode: PlaybackMode) => {
+    setState(prev => ({ ...prev, playbackMode: mode }));
+    localStorage.setItem('soundscape_playback_mode', mode);
+  }, []);
+
   const stop = useCallback(() => {
     if (playerRef.current) {
       playerRef.current.pause();
+    }
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
     }
     if (embedControllerRef.current) {
       try {
@@ -702,6 +830,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
       error: null,
       position: 0,
       duration: 0,
+      volume: prev.volume,
+      playbackMode: prev.playbackMode,
       currentProvider: null,
       userPreference: prev.userPreference
     }));
@@ -857,8 +987,10 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
   }, []);
 
   // Show/hide embed container based on whether we're playing
-  const showEmbed = state.currentSong && (
-    // Show for Spotify embed (non-premium)
+  // Don't show embed container when using native audio (preview playback)
+  const usingNativeAudio = audioRef.current && audioRef.current.src;
+  const showEmbed = state.currentSong && !usingNativeAudio && (
+    // Show for Spotify embed (non-premium, no preview available)
     (state.currentProvider === 'spotify' && !connection.isPremium) ||
     // Show for other providers (always use embed)
     (state.currentProvider && state.currentProvider !== 'spotify')
@@ -873,6 +1005,8 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     resume,
     togglePlayPause,
     seek,
+    setVolume,
+    setPlaybackMode,
     stop,
     connectSpotify,
     disconnectSpotify,
@@ -882,7 +1016,7 @@ export function MusicPlayerProvider({ children }: { children: React.ReactNode })
     setSoundCloudPremiumStatus,
     setProviderPreference,
     registerOnSongEnd
-  }), [state, connection, providerConnections, play, pause, resume, togglePlayPause, seek, stop, connectSpotify, disconnectSpotify, connectProvider, disconnectProvider, confirmSoundCloud, setSoundCloudPremiumStatus, setProviderPreference, registerOnSongEnd]);
+  }), [state, connection, providerConnections, play, pause, resume, togglePlayPause, seek, setVolume, setPlaybackMode, stop, connectSpotify, disconnectSpotify, connectProvider, disconnectProvider, confirmSoundCloud, setSoundCloudPremiumStatus, setProviderPreference, registerOnSongEnd]);
 
   return (
     <MusicPlayerContext.Provider value={value}>
